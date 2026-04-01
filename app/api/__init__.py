@@ -1,43 +1,52 @@
 from fastapi import APIRouter
-from .endpoints import (
-    sports,
-    matches,
-    odds,
-    predictions,
-    analytics,
-    auth,
-    ml,
-    backtesting,
-    bankroll,
-    export,
-    webhooks,
-    ws,
-    notifications,
-)
+# Temporarily disable problematic imports during MongoDB migration
+# from .endpoints import (
+#     sports,
+#     matches,
+#     odds,
+#     predictions,
+#     analytics,
+#     auth,
+#     ml,
+#     backtesting,
+#     bankroll,
+#     export,
+#     webhooks,
+#     ws,
+#     notifications,
+# )
 
 api_router = APIRouter()
 
-# Auth endpoints (no prefix, includes /register, /login, /me, etc.)
-api_router.include_router(auth.router, tags=["Authentication"])
+# TEMPORARY: Routes disabled during MongoDB migration
+# Will re-enable once all endpoints are converted to Beanie
 
-# Sport data endpoints
-api_router.include_router(sports.router, prefix="/sports", tags=["Sports"])
-api_router.include_router(matches.router, prefix="/matches", tags=["Matches"])
-api_router.include_router(odds.router, prefix="/odds", tags=["Odds"])
-api_router.include_router(predictions.router, prefix="/predictions", tags=["Predictions"])
-api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
+# # Auth endpoints (no prefix, includes /register, /login, /me, etc.)
+# api_router.include_router(auth.router, tags=["Authentication"])
 
-# ML and advanced features
-api_router.include_router(ml.router, prefix="/ml", tags=["Machine Learning"])
-api_router.include_router(backtesting.router, prefix="/backtesting", tags=["Backtesting"])
-api_router.include_router(bankroll.router, prefix="/bankroll", tags=["Bankroll Management"])
-api_router.include_router(export.router, prefix="/export", tags=["Data Export"])
+# # Sport data endpoints
+# api_router.include_router(sports.router, prefix="/sports", tags=["Sports"])
+# api_router.include_router(matches.router, prefix="/matches", tags=["Matches"])
+# api_router.include_router(odds.router, prefix="/odds", tags=["Odds"])
+# api_router.include_router(predictions.router, prefix="/predictions", tags=["Predictions"])
+# api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 
-# Notifications
-api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+# # ML and advanced features
+# api_router.include_router(ml.router, prefix="/ml", tags=["Machine Learning"])
+# api_router.include_router(backtesting.router, prefix="/backtesting", tags=["Backtesting"])
+# api_router.include_router(bankroll.router, prefix="/bankroll", tags=["Bankroll Management"])
+# api_router.include_router(export.router, prefix="/export", tags=["Data Export"])
 
-# Webhooks
-api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
+# # Notifications
+# api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 
-# WebSockets
-api_router.include_router(ws.router, tags=["WebSockets"])
+# # Webhooks
+# api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
+
+# # WebSockets
+# api_router.include_router(ws.router, tags=["WebSockets"])
+
+# Health check endpoint
+@api_router.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "API is running with MongoDB"}

@@ -10,9 +10,6 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, and_
-from sqlalchemy.orm import selectinload
 import logging
 
 from app.models.webhook import Webhook, WebhookDelivery, WebhookStatus
@@ -29,9 +26,8 @@ logger = logging.getLogger(__name__)
 class WebhookService:
     """Service for webhook management and delivery."""
     
-    def __init__(self, db: AsyncSession):
+    def __init__(self):
         """Initialize the webhook service."""
-        self.db = db
         self.http_client = httpx.AsyncClient(timeout=30.0)
     
     async def close(self):
@@ -43,7 +39,7 @@ class WebhookService:
     async def create_webhook(
         self, 
         webhook_data: WebhookCreate,
-        user_id: Optional[int] = None
+        user_id: Optional[str] = None
     ) -> Webhook:
         """Create a new webhook subscription."""
         webhook = Webhook(
@@ -58,44 +54,36 @@ class WebhookService:
             is_active=True
         )
         
-        self.db.add(webhook)
-        await self.db.commit()
-        await self.db.refresh(webhook)
+        await webhook.save()
         
         logger.info(f"Created webhook {webhook.id}: {webhook.name}")
         return webhook
     
-    async def get_webhook(self, webhook_id: int) -> Optional[Webhook]:
+    async def get_webhook(self, webhook_id: str) -> Optional[Webhook]:
         """Get a webhook by ID."""
-        result = await self.db.execute(
-            select(Webhook).where(Webhook.id == webhook_id)
-        )
-        return result.scalar_one_or_none()
+        return await Webhook.get(webhook_id)
     
     async def get_webhooks(
         self, 
-        user_id: Optional[int] = None,
+        user_id: Optional[str] = None,
         is_active: Optional[bool] = None,
         skip: int = 0,
         limit: int = 100
     ) -> List[Webhook]:
         """Get all webhooks with optional filtering."""
-        query = select(Webhook)
+        query = Webhook.find()
         
         if user_id is not None:
-            query = query.where(Webhook.user_id == user_id)
+            query = query.find(Webhook.user_id == user_id)
         
         if is_active is not None:
-            query = query.where(Webhook.is_active == is_active)
+            query = query.find(Webhook.is_active == is_active)
         
-        query = query.offset(skip).limit(limit)
-        
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return await query.skip(skip).limit(limit).to_list()
     
     async def update_webhook(
         self, 
-        webhook_id: int, 
+        webhook_id: str, 
         webhook_data: WebhookUpdate
     ) -> Optional[Webhook]:
         """Update a webhook."""
@@ -114,20 +102,18 @@ class WebhookService:
         for key, value in update_data.items():
             setattr(webhook, key, value)
         
-        await self.db.commit()
-        await self.db.refresh(webhook)
+        await webhook.save()
         
         logger.info(f"Updated webhook {webhook_id}")
         return webhook
     
-    async def delete_webhook(self, webhook_id: int) -> bool:
+    async def delete_webhook(self, webhook_id: str) -> bool:
         """Delete a webhook."""
         webhook = await self.get_webhook(webhook_id)
         if not webhook:
             return False
         
-        await self.db.delete(webhook)
-        await self.db.commit()
+        await webhook.delete()
         
         logger.info(f"Deleted webhook {webhook_id}")
         return True
@@ -149,16 +135,8 @@ class WebhookService:
         Returns:
             List of delivery records
         """
-        # Get all active webhooks subscribed to this event
-        result = await self.db.execute(
-            select(Webhook).where(
-                and_(
-                    Webhook.is_active == True,
-                    # JSON contains check - works with PostgreSQL
-                )
-            )
-        )
-        webhooks = list(result.scalars().all())
+        # Get all active webhooks
+        webhooks = await Webhook.find(Webhook.is_active == True).to_list()
         
         # Filter webhooks that are subscribed to this event
         subscribed_webhooks = [
@@ -199,16 +177,14 @@ class WebhookService:
         )
         
         delivery = WebhookDelivery(
-            webhook_id=webhook.id,
+            webhook_id=str(webhook.id),
             event_type=event_type.value,
             payload=payload.model_dump(mode="json"),
             status=WebhookStatus.PENDING.value,
             attempts=0
         )
         
-        self.db.add(delivery)
-        await self.db.commit()
-        await self.db.refresh(delivery)
+        await delivery.save()
         
         return delivery
     
@@ -297,7 +273,8 @@ class WebhookService:
             webhook.total_deliveries += 1
             webhook.last_triggered_at = datetime.utcnow()
         
-        await self.db.commit()
+        await delivery.save()
+        await webhook.save()
         return delivery.status == WebhookStatus.DELIVERED.value
     
     def _sign_payload(self, payload: str, secret: str) -> str:
@@ -318,18 +295,10 @@ class WebhookService:
         now = datetime.utcnow()
         
         # Get deliveries due for retry
-        result = await self.db.execute(
-            select(WebhookDelivery)
-            .options(selectinload(WebhookDelivery.webhook))
-            .where(
-                and_(
-                    WebhookDelivery.status == WebhookStatus.RETRYING.value,
-                    WebhookDelivery.next_retry_at <= now
-                )
-            )
-        )
-        
-        deliveries = list(result.scalars().all())
+        deliveries = await WebhookDelivery.find(
+            WebhookDelivery.status == WebhookStatus.RETRYING.value,
+            WebhookDelivery.next_retry_at <= now
+        ).to_list()
         
         if not deliveries:
             return 0
@@ -338,8 +307,10 @@ class WebhookService:
         
         tasks = []
         for delivery in deliveries:
-            if delivery.webhook and delivery.webhook.is_active:
-                tasks.append(self._deliver_webhook(delivery, delivery.webhook))
+            # Fetch the webhook
+            webhook = await Webhook.get(delivery.webhook_id)
+            if webhook and webhook.is_active:
+                tasks.append(self._deliver_webhook(delivery, webhook))
         
         await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -347,7 +318,7 @@ class WebhookService:
     
     async def test_webhook(
         self,
-        webhook_id: int,
+        webhook_id: str,
         event_type: WebhookEventType = WebhookEventType.PREDICTION_READY,
         custom_payload: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -422,26 +393,23 @@ class WebhookService:
     
     async def get_delivery_history(
         self,
-        webhook_id: Optional[int] = None,
+        webhook_id: Optional[str] = None,
         status: Optional[str] = None,
         skip: int = 0,
         limit: int = 50
     ) -> List[WebhookDelivery]:
         """Get webhook delivery history."""
-        query = select(WebhookDelivery).order_by(WebhookDelivery.created_at.desc())
+        query = WebhookDelivery.find().sort(-WebhookDelivery.created_at)
         
         if webhook_id:
-            query = query.where(WebhookDelivery.webhook_id == webhook_id)
+            query = query.find(WebhookDelivery.webhook_id == webhook_id)
         
         if status:
-            query = query.where(WebhookDelivery.status == status)
+            query = query.find(WebhookDelivery.status == status)
         
-        query = query.offset(skip).limit(limit)
-        
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return await query.skip(skip).limit(limit).to_list()
     
-    async def get_stats(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+    async def get_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get webhook statistics."""
         # Get webhooks
         webhooks = await self.get_webhooks(user_id=user_id)
@@ -462,13 +430,11 @@ class WebhookService:
             limit=10
         )
         
-        # Get deliveries by event type
-        result = await self.db.execute(
-            select(WebhookDelivery.event_type)
-        )
-        events = [r[0] for r in result.all()]
+        # Get all deliveries and count by event type
+        all_deliveries = await WebhookDelivery.find().to_list()
         deliveries_by_event = {}
-        for event in events:
+        for delivery in all_deliveries:
+            event = delivery.event_type
             deliveries_by_event[event] = deliveries_by_event.get(event, 0) + 1
         
         return {
@@ -487,13 +453,12 @@ class WebhookService:
 _webhook_service: Optional[WebhookService] = None
 
 
-async def get_webhook_service(db: AsyncSession) -> WebhookService:
+async def get_webhook_service() -> WebhookService:
     """Get webhook service instance."""
-    return WebhookService(db)
+    return WebhookService()
 
 
 async def trigger_webhook_event(
-    db: AsyncSession,
     event_type: WebhookEventType,
     data: Dict[str, Any]
 ) -> None:
@@ -502,12 +467,11 @@ async def trigger_webhook_event(
     
     Usage:
         await trigger_webhook_event(
-            db,
             WebhookEventType.VALUE_BET_FOUND,
             {"match_id": 123, "odds": 2.5, "edge": 0.08}
         )
     """
-    service = WebhookService(db)
+    service = WebhookService()
     try:
         await service.trigger_event(event_type, data)
     finally:
