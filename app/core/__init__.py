@@ -1,4 +1,4 @@
 from .config import settings
-from .database import get_db, engine, SessionLocal
+from .database import connect_to_mongo, close_mongo_connection, init_db, get_database
 
-__all__ = ["settings", "get_db", "engine", "SessionLocal"]
+__all__ = ["settings", "connect_to_mongo", "close_mongo_connection", "init_db", "get_database"]
