@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     
     # API Settings
-    API_V1_PREFIX: str = "/api/v1"
+    API_V1_PREFIX: str = "/api"
     
     # Security
     SECRET_KEY: str = "change-me-in-production"
