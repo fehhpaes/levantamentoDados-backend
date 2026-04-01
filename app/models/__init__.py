@@ -16,7 +16,7 @@ from .notification import (
     NotificationPriority,
     DigestFrequency,
 )
-from .user import User, BankrollState, BankrollTransaction
+from .user import BankrollState, BankrollTransaction
 
 __all__ = [
     "BaseDocument",
@@ -54,8 +54,7 @@ __all__ = [
     "NotificationStatus",
     "NotificationPriority",
     "DigestFrequency",
-    # User
-    "User",
+    # Bankroll
     "BankrollState",
     "BankrollTransaction",
 ]

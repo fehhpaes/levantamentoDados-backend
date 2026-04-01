@@ -4,27 +4,8 @@ from typing import Optional, List
 from datetime import datetime
 from .base import BaseDocument
 
-
-class User(BaseDocument):
-    """User model."""
-    email: Indexed(str, unique=True)
-    username: Indexed(str, unique=True)
-    hashed_password: str
-    
-    full_name: Optional[str] = None
-    is_active: bool = True
-    is_superuser: bool = False
-    is_verified: bool = False
-    
-    # Preferences
-    timezone: str = "America/Sao_Paulo"
-    language: str = "pt"
-    
-    # Last login
-    last_login_at: Optional[datetime] = None
-    
-    class Settings:
-        name = "users"
+# Note: User model is defined in app.auth.models to avoid circular imports
+# Import from there: from app.auth.models import User
 
 
 class BankrollState(BaseDocument):

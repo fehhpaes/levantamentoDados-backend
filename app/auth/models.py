@@ -1,14 +1,12 @@
 """
-User and Authentication Models
+User and Authentication Models - MongoDB/Beanie Version
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum, ForeignKey, Table
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
+from beanie import Document, Indexed
 import uuid
 
 
@@ -29,99 +27,87 @@ class SubscriptionPlan(str, Enum):
     ENTERPRISE = "enterprise"
 
 
-# SQLAlchemy Models (for database)
-from ..models.base import Base
+# Beanie Document Models (for MongoDB)
 
-
-# Association table for user-team favorites
-user_favorite_teams = Table(
-    'user_favorite_teams',
-    Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
-    Column('team_id', Integer, ForeignKey('teams.id'), primary_key=True)
-)
-
-
-class User(Base):
+class User(Document):
     """User database model."""
-    __tablename__ = "users"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    uuid = Column(String(36), unique=True, default=lambda: str(uuid.uuid4()))
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    username = Column(String(50), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
+    uuid: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: Indexed(str, unique=True)
+    username: Indexed(str, unique=True)
+    hashed_password: str
     
     # Profile
-    full_name = Column(String(100))
-    avatar_url = Column(String(255))
-    timezone = Column(String(50), default="UTC")
-    language = Column(String(10), default="en")
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    timezone: str = "UTC"
+    language: str = "en"
     
     # Role and subscription
-    role = Column(SQLEnum(UserRole), default=UserRole.USER)
-    subscription_plan = Column(SQLEnum(SubscriptionPlan), default=SubscriptionPlan.FREE)
-    subscription_expires_at = Column(DateTime)
+    role: UserRole = UserRole.USER
+    subscription_plan: SubscriptionPlan = SubscriptionPlan.FREE
+    subscription_expires_at: Optional[datetime] = None
     
     # Status
-    is_active = Column(Boolean, default=True)
-    is_verified = Column(Boolean, default=False)
-    is_banned = Column(Boolean, default=False)
+    is_active: bool = True
+    is_verified: bool = False
+    is_banned: bool = False
     
     # Timestamps
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    last_login_at = Column(DateTime)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    last_login_at: Optional[datetime] = None
     
     # API access
-    api_key = Column(String(64), unique=True)
-    api_requests_today = Column(Integer, default=0)
-    api_requests_limit = Column(Integer, default=100)
+    api_key: Optional[Indexed(str, unique=True)] = None
+    api_requests_today: int = 0
+    api_requests_limit: int = 100
     
-    # Relationships
-    # favorite_teams = relationship("Team", secondary=user_favorite_teams)
-    # predictions = relationship("Prediction", back_populates="user")
-    # bets = relationship("Bet", back_populates="user")
+    # Favorites (list of team IDs)
+    favorite_team_ids: List[str] = []
+    
+    class Settings:
+        name = "users"
 
 
-class RefreshToken(Base):
+class RefreshToken(Document):
     """Refresh token for JWT authentication."""
-    __tablename__ = "refresh_tokens"
+    user_id: Indexed(str)
+    token: Indexed(str, unique=True)
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    revoked_at: Optional[datetime] = None
+    device_info: Optional[str] = None
+    ip_address: Optional[str] = None
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token = Column(String(255), unique=True, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    revoked_at = Column(DateTime)
-    device_info = Column(String(255))
-    ip_address = Column(String(45))
+    class Settings:
+        name = "refresh_tokens"
 
 
-class PasswordReset(Base):
+class PasswordReset(Document):
     """Password reset request."""
-    __tablename__ = "password_resets"
+    user_id: Indexed(str)
+    token: Indexed(str, unique=True)
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    used_at: Optional[datetime] = None
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token = Column(String(255), unique=True, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    used_at = Column(DateTime)
+    class Settings:
+        name = "password_resets"
 
 
-class EmailVerification(Base):
+class EmailVerification(Document):
     """Email verification token."""
-    __tablename__ = "email_verifications"
+    user_id: Indexed(str)
+    token: Indexed(str, unique=True)
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    token = Column(String(255), unique=True, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    class Settings:
+        name = "email_verifications"
 
 
-# Pydantic Schemas
+# Pydantic Schemas (for API)
+
 class UserBase(BaseModel):
     """Base user schema."""
     email: EmailStr
@@ -144,7 +130,7 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     """Schema for user response."""
-    id: int
+    id: str
     uuid: str
     role: UserRole
     subscription_plan: SubscriptionPlan
@@ -177,7 +163,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     """Token response schema."""
     access_token: str
-    refresh_token: Optional[str]
+    refresh_token: Optional[str] = None
     token_type: str = "bearer"
     expires_in: int
 

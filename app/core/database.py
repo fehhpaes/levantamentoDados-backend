@@ -48,12 +48,17 @@ async def init_db():
         Odds,
         Bookmaker,
         Prediction,
-        User,
         Notification,
         NotificationPreferences,
         Webhook,
         BankrollState,
         BankrollTransaction,
+    )
+    from app.auth.models import (
+        User,
+        RefreshToken,
+        PasswordReset,
+        EmailVerification,
     )
     
     if not mongo_client:
@@ -70,6 +75,9 @@ async def init_db():
             Bookmaker,
             Prediction,
             User,
+            RefreshToken,
+            PasswordReset,
+            EmailVerification,
             Notification,
             NotificationPreferences,
             Webhook,

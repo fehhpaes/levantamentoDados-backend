@@ -1,12 +1,24 @@
 from fastapi import APIRouter
-# Temporarily disable problematic imports during MongoDB migration
+from .endpoints import auth
+
+api_router = APIRouter()
+
+# Auth endpoints (converted to MongoDB)
+api_router.include_router(auth.router, tags=["Authentication"])
+
+# Health check endpoint
+@api_router.get("/health")
+async def health_check():
+    return {"status": "ok", "message": "API is running with MongoDB"}
+
+
+# TEMPORARILY DISABLED - Routes still need MongoDB conversion:
 # from .endpoints import (
 #     sports,
 #     matches,
 #     odds,
 #     predictions,
 #     analytics,
-#     auth,
 #     ml,
 #     backtesting,
 #     bankroll,
@@ -15,14 +27,6 @@ from fastapi import APIRouter
 #     ws,
 #     notifications,
 # )
-
-api_router = APIRouter()
-
-# TEMPORARY: Routes disabled during MongoDB migration
-# Will re-enable once all endpoints are converted to Beanie
-
-# # Auth endpoints (no prefix, includes /register, /login, /me, etc.)
-# api_router.include_router(auth.router, tags=["Authentication"])
 
 # # Sport data endpoints
 # api_router.include_router(sports.router, prefix="/sports", tags=["Sports"])
@@ -45,8 +49,3 @@ api_router = APIRouter()
 
 # # WebSockets
 # api_router.include_router(ws.router, tags=["WebSockets"])
-
-# Health check endpoint
-@api_router.get("/health")
-async def health_check():
-    return {"status": "ok", "message": "API is running with MongoDB"}

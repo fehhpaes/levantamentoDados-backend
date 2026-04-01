@@ -1,12 +1,9 @@
 """
-Authentication Service
+Authentication Service - MongoDB/Beanie Version
 """
 
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
-from sqlalchemy.orm import selectinload
 import logging
 
 from .models import (
@@ -38,9 +35,9 @@ class AuthService:
     - API key management
     """
     
-    def __init__(self, db: AsyncSession):
-        """Initialize auth service with database session."""
-        self.db = db
+    def __init__(self):
+        """Initialize auth service."""
+        pass
     
     async def register_user(
         self,
@@ -77,20 +74,17 @@ class AuthService:
             api_key=generate_api_key()
         )
         
-        self.db.add(user)
-        await self.db.commit()
-        await self.db.refresh(user)
+        await user.save()
         
         # Create verification token
         verification_token = generate_verification_token()
         verification = EmailVerification(
-            user_id=user.id,
+            user_id=str(user.id),
             token=verification_token,
             expires_at=datetime.utcnow() + timedelta(hours=24)
         )
         
-        self.db.add(verification)
-        await self.db.commit()
+        await verification.save()
         
         logger.info(f"User registered: {user.email}")
         return user, verification_token
@@ -124,7 +118,7 @@ class AuthService:
         
         # Update last login
         user.last_login_at = datetime.utcnow()
-        await self.db.commit()
+        await user.save()
         
         return user
     
@@ -163,12 +157,11 @@ class AuthService:
             
             # Store refresh token
             token_record = RefreshToken(
-                user_id=user.id,
+                user_id=str(user.id),
                 token=refresh_token,
                 expires_at=datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
             )
-            self.db.add(token_record)
-            await self.db.commit()
+            await token_record.save()
         
         logger.info(f"User logged in: {user.email}")
         
@@ -199,20 +192,17 @@ class AuthService:
         user_id = payload.get("sub")
         
         # Verify token exists in database
-        result = await self.db.execute(
-            select(RefreshToken).where(
-                RefreshToken.token == refresh_token,
-                RefreshToken.revoked_at.is_(None),
-                RefreshToken.expires_at > datetime.utcnow()
-            )
+        token_record = await RefreshToken.find_one(
+            RefreshToken.token == refresh_token,
+            RefreshToken.revoked_at == None,
+            RefreshToken.expires_at > datetime.utcnow()
         )
-        token_record = result.scalar_one_or_none()
         
         if not token_record:
             return None
         
         # Get user
-        user = await self.get_user_by_id(int(user_id))
+        user = await self.get_user_by_id(user_id)
         
         if not user or not user.is_active:
             return None
@@ -234,7 +224,7 @@ class AuthService:
     
     async def logout(
         self,
-        user_id: int,
+        user_id: str,
         refresh_token: Optional[str] = None
     ) -> None:
         """
@@ -245,23 +235,21 @@ class AuthService:
             refresh_token: Specific token to revoke (None for all)
         """
         if refresh_token:
-            await self.db.execute(
-                update(RefreshToken)
-                .where(RefreshToken.token == refresh_token)
-                .values(revoked_at=datetime.utcnow())
-            )
+            token = await RefreshToken.find_one(RefreshToken.token == refresh_token)
+            if token:
+                token.revoked_at = datetime.utcnow()
+                await token.save()
         else:
             # Revoke all user tokens
-            await self.db.execute(
-                update(RefreshToken)
-                .where(
-                    RefreshToken.user_id == user_id,
-                    RefreshToken.revoked_at.is_(None)
-                )
-                .values(revoked_at=datetime.utcnow())
-            )
+            tokens = await RefreshToken.find(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at == None
+            ).to_list()
+            
+            for token in tokens:
+                token.revoked_at = datetime.utcnow()
+                await token.save()
         
-        await self.db.commit()
         logger.info(f"User logged out: {user_id}")
     
     async def verify_email(self, token: str) -> bool:
@@ -274,27 +262,22 @@ class AuthService:
         Returns:
             True if verification successful
         """
-        result = await self.db.execute(
-            select(EmailVerification).where(
-                EmailVerification.token == token,
-                EmailVerification.expires_at > datetime.utcnow()
-            )
+        verification = await EmailVerification.find_one(
+            EmailVerification.token == token,
+            EmailVerification.expires_at > datetime.utcnow()
         )
-        verification = result.scalar_one_or_none()
         
         if not verification:
             return False
         
         # Update user
-        await self.db.execute(
-            update(User)
-            .where(User.id == verification.user_id)
-            .values(is_verified=True)
-        )
+        user = await User.get(verification.user_id)
+        if user:
+            user.is_verified = True
+            await user.save()
         
         # Delete verification token
-        await self.db.delete(verification)
-        await self.db.commit()
+        await verification.delete()
         
         logger.info(f"Email verified for user: {verification.user_id}")
         return True
@@ -318,20 +301,21 @@ class AuthService:
             return None
         
         # Delete existing reset requests
-        await self.db.execute(
-            delete(PasswordReset).where(PasswordReset.user_id == user.id)
-        )
+        existing_resets = await PasswordReset.find(
+            PasswordReset.user_id == str(user.id)
+        ).to_list()
+        for reset in existing_resets:
+            await reset.delete()
         
         # Create reset token
         token = generate_password_reset_token()
         reset = PasswordReset(
-            user_id=user.id,
+            user_id=str(user.id),
             token=token,
             expires_at=datetime.utcnow() + timedelta(hours=1)
         )
         
-        self.db.add(reset)
-        await self.db.commit()
+        await reset.save()
         
         logger.info(f"Password reset requested: {email}")
         return token
@@ -351,43 +335,39 @@ class AuthService:
         Returns:
             True if reset successful
         """
-        result = await self.db.execute(
-            select(PasswordReset).where(
-                PasswordReset.token == token,
-                PasswordReset.expires_at > datetime.utcnow(),
-                PasswordReset.used_at.is_(None)
-            )
+        reset = await PasswordReset.find_one(
+            PasswordReset.token == token,
+            PasswordReset.expires_at > datetime.utcnow(),
+            PasswordReset.used_at == None
         )
-        reset = result.scalar_one_or_none()
         
         if not reset:
             return False
         
         # Update password
-        await self.db.execute(
-            update(User)
-            .where(User.id == reset.user_id)
-            .values(hashed_password=get_password_hash(new_password))
-        )
+        user = await User.get(reset.user_id)
+        if user:
+            user.hashed_password = get_password_hash(new_password)
+            await user.save()
         
         # Mark token as used
         reset.used_at = datetime.utcnow()
+        await reset.save()
         
         # Revoke all refresh tokens
-        await self.db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.user_id == reset.user_id)
-            .values(revoked_at=datetime.utcnow())
-        )
-        
-        await self.db.commit()
+        tokens = await RefreshToken.find(
+            RefreshToken.user_id == reset.user_id
+        ).to_list()
+        for token_record in tokens:
+            token_record.revoked_at = datetime.utcnow()
+            await token_record.save()
         
         logger.info(f"Password reset completed for user: {reset.user_id}")
         return True
     
     async def change_password(
         self,
-        user_id: int,
+        user_id: str,
         current_password: str,
         new_password: str
     ) -> bool:
@@ -411,45 +391,33 @@ class AuthService:
             return False
         
         user.hashed_password = get_password_hash(new_password)
-        await self.db.commit()
+        await user.save()
         
         logger.info(f"Password changed for user: {user_id}")
         return True
     
-    async def get_user_by_id(self, user_id: int) -> Optional[User]:
+    async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID."""
-        result = await self.db.execute(
-            select(User).where(User.id == user_id)
-        )
-        return result.scalar_one_or_none()
+        return await User.get(user_id)
     
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email."""
-        result = await self.db.execute(
-            select(User).where(User.email == email)
-        )
-        return result.scalar_one_or_none()
+        return await User.find_one(User.email == email)
     
     async def get_user_by_username(self, username: str) -> Optional[User]:
         """Get user by username."""
-        result = await self.db.execute(
-            select(User).where(User.username == username)
-        )
-        return result.scalar_one_or_none()
+        return await User.find_one(User.username == username)
     
     async def get_user_by_api_key(self, api_key: str) -> Optional[User]:
         """Get user by API key."""
-        result = await self.db.execute(
-            select(User).where(
-                User.api_key == api_key,
-                User.is_active == True
-            )
+        return await User.find_one(
+            User.api_key == api_key,
+            User.is_active == True
         )
-        return result.scalar_one_or_none()
     
     async def update_user(
         self,
-        user_id: int,
+        user_id: str,
         update_data: UserUpdate
     ) -> Optional[User]:
         """Update user profile."""
@@ -463,12 +431,11 @@ class AuthService:
         for field, value in update_dict.items():
             setattr(user, field, value)
         
-        await self.db.commit()
-        await self.db.refresh(user)
+        await user.save()
         
         return user
     
-    async def regenerate_api_key(self, user_id: int) -> Optional[str]:
+    async def regenerate_api_key(self, user_id: str) -> Optional[str]:
         """Regenerate user API key."""
         user = await self.get_user_by_id(user_id)
         
@@ -477,14 +444,14 @@ class AuthService:
         
         new_key = generate_api_key()
         user.api_key = new_key
-        await self.db.commit()
+        await user.save()
         
         logger.info(f"API key regenerated for user: {user_id}")
         return new_key
     
     async def update_subscription(
         self,
-        user_id: int,
+        user_id: str,
         plan: SubscriptionPlan,
         expires_at: datetime
     ) -> bool:
@@ -506,12 +473,12 @@ class AuthService:
         }
         user.api_requests_limit = limits.get(plan, 100)
         
-        await self.db.commit()
+        await user.save()
         
         logger.info(f"Subscription updated for user {user_id}: {plan.value}")
         return True
     
-    async def check_api_rate_limit(self, user_id: int) -> bool:
+    async def check_api_rate_limit(self, user_id: str) -> bool:
         """Check if user has exceeded API rate limit."""
         user = await self.get_user_by_id(user_id)
         
@@ -520,21 +487,21 @@ class AuthService:
         
         return user.api_requests_today < user.api_requests_limit
     
-    async def increment_api_usage(self, user_id: int) -> None:
+    async def increment_api_usage(self, user_id: str) -> None:
         """Increment API usage counter."""
-        await self.db.execute(
-            update(User)
-            .where(User.id == user_id)
-            .values(api_requests_today=User.api_requests_today + 1)
-        )
-        await self.db.commit()
+        user = await self.get_user_by_id(user_id)
+        if user:
+            user.api_requests_today += 1
+            await user.save()
     
     async def reset_daily_api_usage(self) -> int:
         """Reset daily API usage for all users. Called by scheduler."""
-        result = await self.db.execute(
-            update(User).values(api_requests_today=0)
-        )
-        await self.db.commit()
+        users = await User.find().to_list()
+        count = 0
+        for user in users:
+            user.api_requests_today = 0
+            await user.save()
+            count += 1
         
         logger.info("Daily API usage reset for all users")
-        return result.rowcount
+        return count

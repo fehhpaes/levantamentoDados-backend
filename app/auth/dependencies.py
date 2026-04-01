@@ -5,12 +5,10 @@ FastAPI Authentication Dependencies
 from typing import Optional, List
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import User, UserRole
 from .jwt import verify_token
 from .service import AuthService
-from ..core.database import get_db
 
 # Security schemes
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -19,8 +17,7 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
-    api_key: str = Security(api_key_header),
-    db: AsyncSession = Depends(get_db)
+    api_key: str = Security(api_key_header)
 ) -> User:
     """
     Get current authenticated user.
@@ -30,7 +27,6 @@ async def get_current_user(
     Args:
         credentials: Bearer token credentials
         api_key: API key from header
-        db: Database session
         
     Returns:
         Authenticated User
@@ -38,19 +34,19 @@ async def get_current_user(
     Raises:
         HTTPException: If authentication fails
     """
-    auth_service = AuthService(db)
+    auth_service = AuthService()
     
     # Try API key first
     if api_key:
         user = await auth_service.get_user_by_api_key(api_key)
         if user:
             # Check rate limit
-            if not await auth_service.check_api_rate_limit(user.id):
+            if not await auth_service.check_api_rate_limit(str(user.id)):
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="API rate limit exceeded"
                 )
-            await auth_service.increment_api_usage(user.id)
+            await auth_service.increment_api_usage(str(user.id))
             return user
     
     # Try JWT token
@@ -60,7 +56,7 @@ async def get_current_user(
         if payload:
             user_id = payload.get("sub")
             if user_id:
-                user = await auth_service.get_user_by_id(int(user_id))
+                user = await auth_service.get_user_by_id(user_id)
                 if user and user.is_active:
                     return user
     
@@ -192,8 +188,7 @@ require_premium = require_role([UserRole.ADMIN, UserRole.MODERATOR, UserRole.PRE
 
 async def get_optional_user(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
-    api_key: str = Security(api_key_header),
-    db: AsyncSession = Depends(get_db)
+    api_key: str = Security(api_key_header)
 ) -> Optional[User]:
     """
     Get current user if authenticated, None otherwise.
@@ -201,6 +196,6 @@ async def get_optional_user(
     For endpoints that work differently for authenticated users.
     """
     try:
-        return await get_current_user(credentials, api_key, db)
+        return await get_current_user(credentials, api_key)
     except HTTPException:
         return None
