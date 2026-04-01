@@ -32,7 +32,11 @@ class Settings(BaseSettings):
     CACHE_TTL: int = 300  # 5 minutes
     
     # CORS - accepts both list and comma-separated string
-    CORS_ORIGINS: Union[List[str], str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: Union[List[str], str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://levantamento-dados-frontend.vercel.app"
+    ]
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
