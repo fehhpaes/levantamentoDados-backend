@@ -232,6 +232,7 @@ async def seed_demo_data():
     return {"message": "Demo data seeded successfully", "matches": match_count}
 
 
+@router.get("/")
 @router.post("/")
 async def seed():
     result = await seed_demo_data()
