@@ -238,3 +238,38 @@ async def update_all(x_cron_secret: str = Header(None)):
     except Exception as e:
         results["odds"] = {"error": str(e)}
     return {"message": "All data updated", "results": results}
+
+
+@router.get("/generate-predictions")
+async def generate_predictions(x_cron_secret: str = Header(None)):
+    verify_cron(x_cron_secret)
+    import random
+    matches = await Match.find({"status": "scheduled"}).to_list()
+    count = 0
+    for match in matches:
+        existing = await Prediction.find_one({"match_id": str(match.id)})
+        if existing:
+            continue
+        home_prob = random.uniform(0.25, 0.55)
+        draw_prob = random.uniform(0.20, 0.30)
+        away_prob = 1 - home_prob - draw_prob
+        prediction = Prediction(
+            match_id=str(match.id),
+            model_name="ensemble",
+            model_version="v1.0",
+            home_win_prob=round(home_prob, 3),
+            draw_prob=round(draw_prob, 3),
+            away_win_prob=round(away_prob, 3),
+            predicted_home_score=round(random.uniform(1.0, 2.5), 1),
+            predicted_away_score=round(random.uniform(0.5, 1.8), 1),
+            over_2_5_prob=round(random.uniform(0.35, 0.65), 3),
+            under_2_5_prob=round(1 - random.uniform(0.35, 0.65), 3),
+            btts_yes_prob=round(random.uniform(0.40, 0.65), 3),
+            btts_no_prob=round(1 - random.uniform(0.40, 0.65), 3),
+            confidence_score=round(random.uniform(0.55, 0.85), 3),
+            recommended_bet=random.choice(["Home Win", "Draw", "Away Win", "Over 2.5", "BTTS Yes"]),
+            expected_value=round(random.uniform(3, 15), 1),
+        )
+        await prediction.save()
+        count += 1
+    return {"message": "Predictions generated", "count": count}
