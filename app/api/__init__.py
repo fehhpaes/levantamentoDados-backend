@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import auth, sports, matches, odds, predictions, analytics
+from .endpoints import auth, sports, matches, odds, predictions, analytics, seed
 
 api_router = APIRouter()
 
@@ -12,6 +12,9 @@ api_router.include_router(matches.router, prefix="/matches", tags=["Matches"])
 api_router.include_router(odds.router, prefix="/odds", tags=["Odds"])
 api_router.include_router(predictions.router, prefix="/predictions", tags=["Predictions"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
+
+# Seed endpoint (demo data)
+api_router.include_router(seed.router, prefix="/seed", tags=["Seed"])
 
 # Health check endpoint
 @api_router.get("/health")
