@@ -1,47 +1,87 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
-from typing import AsyncGenerator
-from .config import settings
+from motor.motor_asyncio import AsyncIOMotorClient
+from beanie import init_beanie
+from typing import Optional
+from loguru import logger
+
+from app.core.config import settings
+
+# MongoDB client instance
+mongo_client: Optional[AsyncIOMotorClient] = None
 
 
-class Base(DeclarativeBase):
-    """Base class for all database models."""
-    pass
+async def connect_to_mongo():
+    """Connect to MongoDB."""
+    global mongo_client
+    
+    logger.info(f"Connecting to MongoDB...")
+    
+    mongo_client = AsyncIOMotorClient(
+        settings.MONGODB_URL,
+        serverSelectionTimeoutMS=5000,
+    )
+    
+    # Verify connection
+    try:
+        await mongo_client.admin.command('ping')
+        logger.info("Successfully connected to MongoDB!")
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        raise
 
 
-# Create async engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DATABASE_ECHO,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-)
-
-# Session factory
-SessionLocal = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
+async def close_mongo_connection():
+    """Close MongoDB connection."""
+    global mongo_client
+    
+    if mongo_client:
+        mongo_client.close()
+        logger.info("MongoDB connection closed.")
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency for getting database sessions."""
-    async with SessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+async def init_db():
+    """Initialize Beanie with document models."""
+    from app.models import (
+        Sport,
+        League,
+        Team,
+        Match,
+        Odds,
+        Bookmaker,
+        Prediction,
+        User,
+        Notification,
+        NotificationPreferences,
+        Webhook,
+        BankrollState,
+        BankrollTransaction,
+    )
+    
+    if not mongo_client:
+        await connect_to_mongo()
+    
+    await init_beanie(
+        database=mongo_client[settings.MONGODB_DATABASE],
+        document_models=[
+            Sport,
+            League,
+            Team,
+            Match,
+            Odds,
+            Bookmaker,
+            Prediction,
+            User,
+            Notification,
+            NotificationPreferences,
+            Webhook,
+            BankrollState,
+            BankrollTransaction,
+        ]
+    )
+    logger.info("Beanie ODM initialized with document models.")
 
 
-async def init_db() -> None:
-    """Initialize database tables."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+def get_database():
+    """Get MongoDB database instance."""
+    if not mongo_client:
+        raise RuntimeError("MongoDB client not initialized. Call connect_to_mongo() first.")
+    return mongo_client[settings.MONGODB_DATABASE]

@@ -1,99 +1,88 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Text, Boolean, Float
-from sqlalchemy.orm import relationship
-from .base import BaseModel
+from beanie import Document, Indexed, Link
+from pydantic import Field
+from typing import Optional, List
+from datetime import datetime
+from .base import BaseDocument
 
 
-class Sport(BaseModel):
+class Sport(BaseDocument):
     """Sport model (Football, Basketball, Tennis, etc.)"""
-    __tablename__ = "sports"
+    name: Indexed(str, unique=True)
+    slug: Indexed(str, unique=True)
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    is_active: bool = True
     
-    name = Column(String(100), unique=True, nullable=False, index=True)
-    slug = Column(String(100), unique=True, nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    icon = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True)
-    
-    # Relationships
-    leagues = relationship("League", back_populates="sport", lazy="selectin")
+    class Settings:
+        name = "sports"
 
 
-class League(BaseModel):
+class League(BaseDocument):
     """League/Competition model."""
-    __tablename__ = "leagues"
+    sport_id: str  # Reference to Sport
+    name: Indexed(str)
+    slug: Indexed(str)
+    country: Optional[str] = None
+    country_code: Optional[str] = None
+    logo_url: Optional[str] = None
+    season: Optional[str] = None  # e.g., "2024/2025"
+    is_active: bool = True
+    external_id: Optional[str] = None
     
-    sport_id = Column(Integer, ForeignKey("sports.id"), nullable=False, index=True)
-    name = Column(String(200), nullable=False, index=True)
-    slug = Column(String(200), nullable=False, index=True)
-    country = Column(String(100), nullable=True)
-    country_code = Column(String(10), nullable=True)
-    logo_url = Column(String(500), nullable=True)
-    season = Column(String(20), nullable=True)  # e.g., "2024/2025"
-    is_active = Column(Boolean, default=True)
-    external_id = Column(String(100), nullable=True)  # ID from external APIs
-    
-    # Relationships
-    sport = relationship("Sport", back_populates="leagues")
-    teams = relationship("Team", back_populates="league", lazy="selectin")
-    matches = relationship("Match", back_populates="league", lazy="selectin")
+    class Settings:
+        name = "leagues"
 
 
-class Team(BaseModel):
+class Team(BaseDocument):
     """Team model."""
-    __tablename__ = "teams"
+    league_id: Optional[str] = None
+    name: Indexed(str)
+    short_name: Optional[str] = None
+    slug: Indexed(str)
+    logo_url: Optional[str] = None
+    country: Optional[str] = None
+    founded_year: Optional[int] = None
+    venue_name: Optional[str] = None
+    venue_capacity: Optional[int] = None
+    external_id: Optional[str] = None
+    is_active: bool = True
     
-    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=True, index=True)
-    name = Column(String(200), nullable=False, index=True)
-    short_name = Column(String(50), nullable=True)
-    slug = Column(String(200), nullable=False, index=True)
-    logo_url = Column(String(500), nullable=True)
-    country = Column(String(100), nullable=True)
-    founded_year = Column(Integer, nullable=True)
-    venue_name = Column(String(200), nullable=True)
-    venue_capacity = Column(Integer, nullable=True)
-    external_id = Column(String(100), nullable=True)
-    is_active = Column(Boolean, default=True)
+    # Stats cache
+    matches_played: int = 0
+    wins: int = 0
+    draws: int = 0
+    losses: int = 0
+    goals_for: int = 0
+    goals_against: int = 0
+    points: int = 0
     
-    # Stats cache (updated periodically)
-    matches_played = Column(Integer, default=0)
-    wins = Column(Integer, default=0)
-    draws = Column(Integer, default=0)
-    losses = Column(Integer, default=0)
-    goals_for = Column(Integer, default=0)
-    goals_against = Column(Integer, default=0)
-    points = Column(Integer, default=0)
-    
-    # Relationships
-    league = relationship("League", back_populates="teams")
-    players = relationship("Player", back_populates="team", lazy="selectin")
-    home_matches = relationship("Match", foreign_keys="Match.home_team_id", back_populates="home_team")
-    away_matches = relationship("Match", foreign_keys="Match.away_team_id", back_populates="away_team")
+    class Settings:
+        name = "teams"
 
 
-class Player(BaseModel):
+class Player(BaseDocument):
     """Player model."""
-    __tablename__ = "players"
+    team_id: Optional[str] = None
+    name: Indexed(str)
+    short_name: Optional[str] = None
+    position: Optional[str] = None  # GK, DEF, MID, FWD
+    nationality: Optional[str] = None
+    birth_date: Optional[str] = None
+    height: Optional[float] = None  # in cm
+    weight: Optional[float] = None  # in kg
+    photo_url: Optional[str] = None
+    jersey_number: Optional[int] = None
+    external_id: Optional[str] = None
+    is_active: bool = True
     
-    team_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
-    name = Column(String(200), nullable=False, index=True)
-    short_name = Column(String(100), nullable=True)
-    position = Column(String(50), nullable=True)  # GK, DEF, MID, FWD
-    nationality = Column(String(100), nullable=True)
-    birth_date = Column(String(20), nullable=True)
-    height = Column(Float, nullable=True)  # in cm
-    weight = Column(Float, nullable=True)  # in kg
-    photo_url = Column(String(500), nullable=True)
-    jersey_number = Column(Integer, nullable=True)
-    external_id = Column(String(100), nullable=True)
-    is_active = Column(Boolean, default=True)
+    # Season stats
+    appearances: int = 0
+    goals: int = 0
+    assists: int = 0
+    yellow_cards: int = 0
+    red_cards: int = 0
+    minutes_played: int = 0
+    rating: Optional[float] = None
     
-    # Season stats (updated periodically)
-    appearances = Column(Integer, default=0)
-    goals = Column(Integer, default=0)
-    assists = Column(Integer, default=0)
-    yellow_cards = Column(Integer, default=0)
-    red_cards = Column(Integer, default=0)
-    minutes_played = Column(Integer, default=0)
-    rating = Column(Float, nullable=True)  # Average rating
-    
-    # Relationships
-    team = relationship("Team", back_populates="players")
+    class Settings:
+        name = "players"

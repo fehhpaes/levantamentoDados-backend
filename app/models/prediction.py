@@ -1,68 +1,69 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Float, DateTime, Text, Boolean
-from sqlalchemy.orm import relationship
-from .base import BaseModel
+from beanie import Document, Indexed
+from pydantic import Field
+from typing import Optional, Dict, Any, List
+from datetime import datetime
+from .base import BaseDocument
 
 
-class Prediction(BaseModel):
+class Prediction(BaseDocument):
     """Match predictions from ML models or analysis."""
-    __tablename__ = "predictions"
-    
-    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False, index=True)
+    match_id: Indexed(str)
     
     # Prediction source/model
-    model_name = Column(String(100), nullable=False)  # e.g., "xgboost_v1", "poisson", "elo"
-    model_version = Column(String(50), nullable=True)
+    model_name: str  # e.g., "xgboost_v1", "poisson", "elo"
+    model_version: Optional[str] = None
     
     # Predicted probabilities
-    home_win_prob = Column(Float, nullable=True)
-    draw_prob = Column(Float, nullable=True)
-    away_win_prob = Column(Float, nullable=True)
+    home_win_prob: Optional[float] = None
+    draw_prob: Optional[float] = None
+    away_win_prob: Optional[float] = None
     
     # Predicted scores
-    predicted_home_score = Column(Float, nullable=True)
-    predicted_away_score = Column(Float, nullable=True)
+    predicted_home_score: Optional[float] = None
+    predicted_away_score: Optional[float] = None
     
     # Over/Under predictions
-    over_2_5_prob = Column(Float, nullable=True)
-    under_2_5_prob = Column(Float, nullable=True)
+    over_2_5_prob: Optional[float] = None
+    under_2_5_prob: Optional[float] = None
     
     # BTTS
-    btts_yes_prob = Column(Float, nullable=True)
-    btts_no_prob = Column(Float, nullable=True)
+    btts_yes_prob: Optional[float] = None
+    btts_no_prob: Optional[float] = None
     
     # Confidence and accuracy
-    confidence_score = Column(Float, nullable=True)  # 0-1
+    confidence_score: Optional[float] = None  # 0-1
     
     # Value bets identified
-    recommended_bet = Column(String(100), nullable=True)  # e.g., "Over 2.5", "Home Win"
-    expected_value = Column(Float, nullable=True)  # EV percentage
+    recommended_bet: Optional[str] = None
+    expected_value: Optional[float] = None
     
-    # Prediction details (JSON)
-    features_used = Column(Text, nullable=True)  # JSON with feature values
-    prediction_details = Column(Text, nullable=True)  # Additional details
+    # Prediction details
+    features_used: Optional[Dict[str, Any]] = None
+    prediction_details: Optional[Dict[str, Any]] = None
     
-    # Relationships
-    match = relationship("Match", back_populates="predictions")
+    class Settings:
+        name = "predictions"
 
 
-class PredictionResult(BaseModel):
+class PredictionResult(BaseDocument):
     """Track prediction accuracy after match completion."""
-    __tablename__ = "prediction_results"
-    
-    prediction_id = Column(Integer, ForeignKey("predictions.id"), unique=True, nullable=False, index=True)
-    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False, index=True)
+    prediction_id: Indexed(str)
+    match_id: Indexed(str)
     
     # Actual results
-    actual_home_score = Column(Integer, nullable=True)
-    actual_away_score = Column(Integer, nullable=True)
-    actual_result = Column(String(10), nullable=True)  # "home", "draw", "away"
+    actual_home_score: Optional[int] = None
+    actual_away_score: Optional[int] = None
+    actual_result: Optional[str] = None  # "home", "draw", "away"
     
     # Prediction accuracy
-    result_correct = Column(Boolean, nullable=True)
-    score_correct = Column(Boolean, nullable=True)
-    over_under_correct = Column(Boolean, nullable=True)
-    btts_correct = Column(Boolean, nullable=True)
+    result_correct: Optional[bool] = None
+    score_correct: Optional[bool] = None
+    over_under_correct: Optional[bool] = None
+    btts_correct: Optional[bool] = None
     
-    # Betting outcome if bet was placed
-    bet_outcome = Column(String(20), nullable=True)  # "won", "lost", "void"
-    profit_loss = Column(Float, nullable=True)  # In units
+    # Betting outcome
+    bet_outcome: Optional[str] = None  # "won", "lost", "void"
+    profit_loss: Optional[float] = None
+    
+    class Settings:
+        name = "prediction_results"

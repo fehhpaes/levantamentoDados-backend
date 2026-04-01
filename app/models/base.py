@@ -1,16 +1,17 @@
-from sqlalchemy import Column, DateTime, Integer
-from sqlalchemy.sql import func
-from app.core.database import Base
+from beanie import Document, Indexed
+from pydantic import Field
+from typing import Optional
+from datetime import datetime
 
 
-class TimestampMixin:
-    """Mixin for adding timestamp columns."""
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-
-
-class BaseModel(Base, TimestampMixin):
-    """Base model with ID and timestamps."""
-    __abstract__ = True
+class BaseDocument(Document):
+    """Base document with timestamps."""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    class Settings:
+        use_state_management = True
+    
+    async def save(self, *args, **kwargs):
+        self.updated_at = datetime.utcnow()
+        return await super().save(*args, **kwargs)

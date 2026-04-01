@@ -1,78 +1,79 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Float, DateTime, Boolean, Text
-from sqlalchemy.orm import relationship
-from .base import BaseModel
+from beanie import Document, Indexed
+from pydantic import Field
+from typing import Optional, Dict, Any
+from datetime import datetime
+from .base import BaseDocument
 
 
-class Bookmaker(BaseModel):
+class Bookmaker(BaseDocument):
     """Bookmaker/Betting site model."""
-    __tablename__ = "bookmakers"
+    name: Indexed(str, unique=True)
+    slug: Indexed(str, unique=True)
+    logo_url: Optional[str] = None
+    website_url: Optional[str] = None
+    country: Optional[str] = None
+    is_active: bool = True
     
-    name = Column(String(100), unique=True, nullable=False, index=True)
-    slug = Column(String(100), unique=True, nullable=False, index=True)
-    logo_url = Column(String(500), nullable=True)
-    website_url = Column(String(500), nullable=True)
-    country = Column(String(100), nullable=True)
-    is_active = Column(Boolean, default=True)
-    
-    # Relationships
-    odds = relationship("Odds", back_populates="bookmaker", lazy="selectin")
+    class Settings:
+        name = "bookmakers"
 
 
-class Odds(BaseModel):
+class Odds(BaseDocument):
     """Current odds for a match."""
-    __tablename__ = "odds"
-    
-    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False, index=True)
-    bookmaker_id = Column(Integer, ForeignKey("bookmakers.id"), nullable=False, index=True)
+    match_id: Indexed(str)
+    bookmaker_id: Indexed(str)
     
     # Market type: 1X2, Over/Under, Both Teams Score, etc.
-    market_type = Column(String(50), nullable=False, index=True)
-    market_name = Column(String(100), nullable=True)  # e.g., "Over 2.5", "Home Win"
+    market_type: Indexed(str)
+    market_name: Optional[str] = None
     
     # Odds values
-    home_odds = Column(Float, nullable=True)     # For 1X2: Home Win
-    draw_odds = Column(Float, nullable=True)     # For 1X2: Draw
-    away_odds = Column(Float, nullable=True)     # For 1X2: Away Win
+    home_odds: Optional[float] = None
+    draw_odds: Optional[float] = None
+    away_odds: Optional[float] = None
     
-    over_odds = Column(Float, nullable=True)     # For O/U markets
-    under_odds = Column(Float, nullable=True)
+    over_odds: Optional[float] = None
+    under_odds: Optional[float] = None
     
-    yes_odds = Column(Float, nullable=True)      # For BTTS, etc.
-    no_odds = Column(Float, nullable=True)
+    yes_odds: Optional[float] = None
+    no_odds: Optional[float] = None
     
-    line = Column(Float, nullable=True)          # For handicaps, totals (e.g., 2.5)
+    line: Optional[float] = None
     
     # Probabilities (calculated)
-    home_prob = Column(Float, nullable=True)
-    draw_prob = Column(Float, nullable=True)
-    away_prob = Column(Float, nullable=True)
+    home_prob: Optional[float] = None
+    draw_prob: Optional[float] = None
+    away_prob: Optional[float] = None
     
     # Value bet indicator
-    is_value_bet = Column(Boolean, default=False)
-    value_percentage = Column(Float, nullable=True)
+    is_value_bet: bool = False
+    value_percentage: Optional[float] = None
     
     # Timestamps for odds
-    odds_updated_at = Column(DateTime(timezone=True), nullable=True)
+    odds_updated_at: Optional[datetime] = None
     
-    # Relationships
-    match = relationship("Match", back_populates="odds")
-    bookmaker = relationship("Bookmaker", back_populates="odds")
+    # Embedded bookmaker info
+    bookmaker: Optional[Dict[str, Any]] = None
+    
+    class Settings:
+        name = "odds"
 
 
-class OddsHistory(BaseModel):
+class OddsHistory(BaseDocument):
     """Historical odds movements."""
-    __tablename__ = "odds_history"
+    match_id: Indexed(str)
+    bookmaker_id: Indexed(str)
     
-    match_id = Column(Integer, ForeignKey("matches.id"), nullable=False, index=True)
-    bookmaker_id = Column(Integer, ForeignKey("bookmakers.id"), nullable=False, index=True)
+    market_type: Indexed(str)
     
-    market_type = Column(String(50), nullable=False, index=True)
+    home_odds: Optional[float] = None
+    draw_odds: Optional[float] = None
+    away_odds: Optional[float] = None
+    over_odds: Optional[float] = None
+    under_odds: Optional[float] = None
+    line: Optional[float] = None
     
-    home_odds = Column(Float, nullable=True)
-    draw_odds = Column(Float, nullable=True)
-    away_odds = Column(Float, nullable=True)
-    over_odds = Column(Float, nullable=True)
-    under_odds = Column(Float, nullable=True)
-    line = Column(Float, nullable=True)
+    recorded_at: Indexed(datetime)
     
-    recorded_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    class Settings:
+        name = "odds_history"

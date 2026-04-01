@@ -23,12 +23,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/sports_data"
-    DATABASE_ECHO: bool = False
+    # MongoDB Database
+    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_DATABASE: str = "sports_data"
     
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # Redis (optional)
+    REDIS_URL: Optional[str] = None
     CACHE_TTL: int = 300  # 5 minutes
     
     # CORS - accepts both list and comma-separated string
@@ -65,9 +65,9 @@ class Settings(BaseSettings):
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     MAX_CONCURRENT_REQUESTS: int = 5
     
-    # Celery
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    # Celery (optional - for background tasks)
+    CELERY_BROKER_URL: Optional[str] = None
+    CELERY_RESULT_BACKEND: Optional[str] = None
     
     # Monitoring
     SENTRY_DSN: Optional[str] = None

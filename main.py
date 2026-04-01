@@ -4,8 +4,7 @@ from contextlib import asynccontextmanager
 from loguru import logger
 
 from app.core.config import settings
-from app.core.database import init_db
-from app.core.redis import cache
+from app.core.database import connect_to_mongo, close_mongo_connection, init_db
 from app.api import api_router
 
 
@@ -15,22 +14,16 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Sports Data Analytics API...")
     
-    # Initialize database
+    # Connect to MongoDB and initialize Beanie
+    await connect_to_mongo()
     await init_db()
-    logger.info("Database initialized")
-    
-    # Connect to Redis
-    try:
-        await cache.connect()
-        logger.info("Redis connected")
-    except Exception as e:
-        logger.warning(f"Redis connection failed: {e}. Continuing without cache.")
+    logger.info("MongoDB connected and initialized")
     
     yield
     
     # Shutdown
     logger.info("Shutting down...")
-    await cache.disconnect()
+    await close_mongo_connection()
 
 
 # Create FastAPI app

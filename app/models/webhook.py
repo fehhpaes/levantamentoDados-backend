@@ -1,15 +1,16 @@
 """
-Webhook models for external notifications.
+Webhook models for external notifications - MongoDB Version
 """
 
-from sqlalchemy import Column, String, Boolean, Text, DateTime, Integer, Enum, JSON, ForeignKey
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-import enum
-from .base import BaseModel
+from beanie import Document, Indexed
+from pydantic import Field
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+from enum import Enum
+from .base import BaseDocument
 
 
-class WebhookEventType(enum.Enum):
+class WebhookEventType(str, Enum):
     """Types of events that can trigger webhooks."""
     MATCH_START = "match_start"
     MATCH_END = "match_end"
@@ -22,7 +23,7 @@ class WebhookEventType(enum.Enum):
     ALERT_TRIGGERED = "alert_triggered"
 
 
-class WebhookStatus(enum.Enum):
+class WebhookStatus(str, Enum):
     """Status of webhook deliveries."""
     PENDING = "pending"
     DELIVERED = "delivered"
@@ -30,53 +31,49 @@ class WebhookStatus(enum.Enum):
     RETRYING = "retrying"
 
 
-class Webhook(BaseModel):
+class Webhook(BaseDocument):
     """Webhook subscription model."""
-    __tablename__ = "webhooks"
+    name: str
+    url: str
+    secret: Optional[str] = None
+    is_active: bool = True
+    user_id: Optional[str] = None
     
-    name = Column(String(100), nullable=False)
-    url = Column(String(500), nullable=False)
-    secret = Column(String(256), nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    
-    # Event subscriptions (comma-separated list or JSON)
-    events = Column(JSON, default=list, nullable=False)
+    # Event subscriptions
+    events: List[WebhookEventType] = Field(default_factory=list)
     
     # Headers to include in webhook requests
-    headers = Column(JSON, default=dict, nullable=True)
+    headers: Dict[str, str] = Field(default_factory=dict)
     
     # Rate limiting
-    max_retries = Column(Integer, default=3, nullable=False)
-    retry_delay = Column(Integer, default=60, nullable=False)  # seconds
+    max_retries: int = 3
+    retry_delay: int = 60  # seconds
     
     # Stats
-    total_deliveries = Column(Integer, default=0, nullable=False)
-    successful_deliveries = Column(Integer, default=0, nullable=False)
-    failed_deliveries = Column(Integer, default=0, nullable=False)
-    last_triggered_at = Column(DateTime(timezone=True), nullable=True)
-    last_error = Column(Text, nullable=True)
+    total_deliveries: int = 0
+    successful_deliveries: int = 0
+    failed_deliveries: int = 0
+    last_triggered_at: Optional[datetime] = None
+    last_error: Optional[str] = None
     
-    # Relationships
-    deliveries = relationship("WebhookDelivery", back_populates="webhook", cascade="all, delete-orphan")
+    class Settings:
+        name = "webhooks"
 
 
-class WebhookDelivery(BaseModel):
+class WebhookDelivery(BaseDocument):
     """Record of webhook delivery attempts."""
-    __tablename__ = "webhook_deliveries"
+    webhook_id: Indexed(str)
+    event_type: str
+    payload: Dict[str, Any]
     
-    webhook_id = Column(Integer, ForeignKey("webhooks.id"), nullable=False)
-    event_type = Column(String(50), nullable=False)
-    payload = Column(JSON, nullable=False)
+    status: WebhookStatus = WebhookStatus.PENDING
+    response_code: Optional[int] = None
+    response_body: Optional[str] = None
+    error_message: Optional[str] = None
     
-    status = Column(String(20), default=WebhookStatus.PENDING.value, nullable=False)
-    response_code = Column(Integer, nullable=True)
-    response_body = Column(Text, nullable=True)
-    error_message = Column(Text, nullable=True)
+    attempts: int = 0
+    next_retry_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
     
-    attempts = Column(Integer, default=0, nullable=False)
-    next_retry_at = Column(DateTime(timezone=True), nullable=True)
-    delivered_at = Column(DateTime(timezone=True), nullable=True)
-    
-    # Relationships
-    webhook = relationship("Webhook", back_populates="deliveries")
+    class Settings:
+        name = "webhook_deliveries"

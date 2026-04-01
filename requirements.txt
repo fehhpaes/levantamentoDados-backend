@@ -4,15 +4,13 @@ uvicorn[standard]==0.27.0
 gunicorn==21.2.0
 python-multipart==0.0.6
 
-# Database
-sqlalchemy==2.0.25
-asyncpg==0.29.0
-alembic==1.13.1
-psycopg2-binary==2.9.9
+# Database - MongoDB
+motor==3.3.2
+beanie==1.25.0
+pymongo==4.6.1
 
 # Cache
 redis==5.0.1
-aioredis==2.0.1
 
 # Data Processing
 pandas==2.2.0
@@ -22,16 +20,12 @@ scipy==1.12.0
 # Machine Learning
 scikit-learn==1.4.0
 xgboost==2.0.3
-tensorflow==2.15.0
-keras==3.0.0
 
 # Web Scraping
 httpx==0.26.0
 aiohttp==3.9.3
 beautifulsoup4==4.12.3
 lxml==5.1.0
-selenium==4.17.2
-playwright==1.41.1
 
 # Validation & Serialization
 pydantic==2.6.0
@@ -64,8 +58,6 @@ pytest==8.0.0
 pytest-asyncio==0.23.4
 pytest-cov==4.1.0
 pytest-mock==3.12.0
-aiosqlite==0.19.0
-httpx==0.26.0
 
 # Logging & Monitoring
 loguru==0.7.2

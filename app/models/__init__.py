@@ -1,10 +1,11 @@
-from .base import BaseModel, TimestampMixin
+from .base import BaseDocument
 from .sport import Sport, League, Team, Player
-from .match import Match, MatchStatistics, MatchEvent
+from .match import Match, MatchStatistics, MatchEvent, MatchStatus, EventType
 from .odds import Bookmaker, Odds, OddsHistory
 from .prediction import Prediction, PredictionResult
 from .webhook import Webhook, WebhookDelivery, WebhookEventType, WebhookStatus
 from .notification import (
+    NotificationPreferences,
     UserNotificationPreferences,
     Notification,
     NotificationTemplate,
@@ -15,27 +16,35 @@ from .notification import (
     NotificationPriority,
     DigestFrequency,
 )
+from .user import User, BankrollState, BankrollTransaction
 
 __all__ = [
-    "BaseModel",
-    "TimestampMixin",
+    "BaseDocument",
+    # Sports
     "Sport",
     "League", 
     "Team",
     "Player",
+    # Matches
     "Match",
     "MatchStatistics",
     "MatchEvent",
+    "MatchStatus",
+    "EventType",
+    # Odds
     "Bookmaker",
     "Odds",
     "OddsHistory",
+    # Predictions
     "Prediction",
     "PredictionResult",
+    # Webhooks
     "Webhook",
     "WebhookDelivery",
     "WebhookEventType",
     "WebhookStatus",
     # Notifications
+    "NotificationPreferences",
     "UserNotificationPreferences",
     "Notification",
     "NotificationTemplate",
@@ -45,4 +54,8 @@ __all__ = [
     "NotificationStatus",
     "NotificationPriority",
     "DigestFrequency",
+    # User
+    "User",
+    "BankrollState",
+    "BankrollTransaction",
 ]
