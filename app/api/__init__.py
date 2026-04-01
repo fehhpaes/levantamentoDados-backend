@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import auth, sports, matches, odds, predictions, analytics, seed
+from .endpoints import auth, sports, matches, odds, predictions, analytics, seed, cron
 
 api_router = APIRouter()
 
@@ -15,6 +15,9 @@ api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytic
 
 # Seed endpoint (demo data)
 api_router.include_router(seed.router, prefix="/seed", tags=["Seed"])
+
+# Cron job endpoints
+api_router.include_router(cron.router, prefix="/cron", tags=["Cron"])
 
 # Health check endpoint
 @api_router.get("/health")
