@@ -166,6 +166,7 @@ class TokenResponse(BaseModel):
     refresh_token: Optional[str] = None
     token_type: str = "bearer"
     expires_in: int
+    user: Optional["UserResponse"] = None
 
 
 class PasswordChangeRequest(BaseModel):

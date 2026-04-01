@@ -32,19 +32,27 @@ class Settings(BaseSettings):
     CACHE_TTL: int = 300  # 5 minutes
     
     # CORS - accepts both list and comma-separated string
-    CORS_ORIGINS: Union[List[str], str] = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://levantamento-dados-frontend.vercel.app"
-    ]
+    # If CORS_ORIGINS env var is set, it will be merged with defaults
+    CORS_ORIGINS: Union[List[str], str] = []
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod
     def parse_cors_origins(cls, v):
         """Parse CORS_ORIGINS from comma-separated string or list."""
+        defaults = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "https://levantamento-dados-frontend.vercel.app"
+        ]
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',') if origin.strip()]
-        return v
+            origins = [origin.strip() for origin in v.split(',') if origin.strip()]
+        elif isinstance(v, list):
+            origins = v
+        else:
+            origins = []
+        # Merge with defaults, avoiding duplicates
+        merged = list(dict.fromkeys(defaults + origins))
+        return merged
     
     # External APIs
     FOOTBALL_DATA_API_KEY: Optional[str] = None

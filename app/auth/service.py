@@ -168,7 +168,20 @@ class AuthService:
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            user=UserResponse(
+                id=str(user.id),
+                uuid=user.uuid,
+                email=user.email,
+                username=user.username,
+                full_name=user.full_name,
+                role=user.role,
+                subscription_plan=user.subscription_plan,
+                is_active=user.is_active,
+                is_verified=user.is_verified,
+                created_at=user.created_at,
+                last_login_at=user.last_login_at
+            )
         )
     
     async def refresh_access_token(
