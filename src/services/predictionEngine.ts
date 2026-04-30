@@ -8,7 +8,6 @@ export class PredictionEngine {
   constructor() {
     this.classifier = new RandomForestClassifier({
       nEstimators: 100,
-      maxDepth: 10,
       seed: 42
     });
   }
@@ -60,11 +59,14 @@ export class PredictionEngine {
       ];
 
       const prediction = this.classifier.predict([predictionInput])[0];
-      const probabilities = this.classifier.predictProbability([predictionInput])[0] as number[];
+      
+      // predictProbability returns a matrix (array of arrays).
+      const probabilitiesArray = this.classifier.predictProbability([predictionInput]);
+      const probabilities = (probabilitiesArray[0] as unknown) as number[];
 
       // Update match document with prediction
       match.prediction = {
-        outcome: prediction as number,
+        outcome: Number(prediction),
         probabilities: {
           homeWin: probabilities[0] || 0,
           draw: probabilities[1] || 0,

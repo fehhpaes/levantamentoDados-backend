@@ -13,7 +13,7 @@ export const getTodayMatches = async (req: Request, res: Response) => {
     }).sort({ date: 1 });
 
     res.json(matches);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Failed to fetch matches' });
   }
 };
@@ -28,7 +28,7 @@ export const getMatchById = async (req: Request, res: Response) => {
     }
 
     res.json(match);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
