@@ -61,7 +61,8 @@ export class PredictionEngine {
       const prediction = this.classifier.predict([predictionInput])[0];
       
       // predictProbability returns a matrix (array of arrays).
-      const probabilitiesArray = this.classifier.predictProbability([predictionInput]);
+      // It expects (features, numberOfClasses)
+      const probabilitiesArray = this.classifier.predictProbability([predictionInput], 3);
       const probabilities = (probabilitiesArray[0] as unknown) as number[];
 
       // Update match document with prediction
