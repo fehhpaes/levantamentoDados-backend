@@ -7,38 +7,57 @@ export class PredictionEngine {
 
   constructor() {
     this.classifier = new RandomForestClassifier({
-      nEstimators: 100,
+      nEstimators: 150, // Slightly more estimators for complexity
       seed: 42
     });
   }
 
   /**
    * Trains the model using finished matches from the database.
+   * Enhances features with moving averages of goals and form.
    */
   async trainModel() {
-    const historicalData = await Match.find({ status: 'FINISHED' });
+    const historicalData = await Match.find({ status: 'FINISHED' }).sort({ date: 1 });
 
-    if (historicalData.length < 10) {
-      console.warn('Insufficient data to train a robust model.');
+    if (historicalData.length < 20) {
+      console.warn('Insufficient data (need at least 20 finished matches) to train the refined model.');
       return;
     }
 
-    const trainingFeatures = historicalData.map(m => [
-      m.stats?.home_possession || 50,
-      m.stats?.away_possession || 50,
-      m.stats?.home_shots_on_target || 4,
-      m.stats?.away_shots_on_target || 4
-    ]);
+    const trainingFeatures: number[][] = [];
+    const labels: number[] = [];
 
-    // Labels: 0 = Home Win, 1 = Draw, 2 = Away Win
-    const labels = historicalData.map(m => {
-      if (m.score.home > m.score.away) return 0;
-      if (m.score.home === m.score.away) return 1;
-      return 2;
-    });
+    for (let i = 0; i < historicalData.length; i++) {
+      const match = historicalData[i];
+      
+      // Get stats of the teams *before* this match was played
+      // (This is an approximation using the current helper which looks at last 5)
+      const homeStats = await getTeamMovingAverage(match.homeTeam.id);
+      const awayStats = await getTeamMovingAverage(match.awayTeam.id);
+
+      const features = [
+        match.stats?.home_possession || homeStats.avgPossession,
+        match.stats?.away_possession || awayStats.avgPossession,
+        match.stats?.home_shots_on_target || homeStats.avgShotsOnTarget,
+        match.stats?.away_shots_on_target || awayStats.avgShotsOnTarget,
+        homeStats.avgGoalsScored,
+        homeStats.avgGoalsConceded,
+        awayStats.avgGoalsScored,
+        awayStats.avgGoalsConceded,
+        homeStats.formPoints,
+        awayStats.formPoints
+      ];
+
+      trainingFeatures.push(features);
+
+      // Label: 0=Home, 1=Draw, 2=Away
+      if (match.score.home > match.score.away) labels.push(0);
+      else if (match.score.home === match.score.away) labels.push(1);
+      else labels.push(2);
+    }
 
     this.classifier.train(trainingFeatures, labels);
-    console.log('Model trained successfully.');
+    console.log(`Refined model trained with ${trainingFeatures.length} matches and 10 features.`);
   }
 
   /**
@@ -55,17 +74,21 @@ export class PredictionEngine {
         homeStats.avgPossession,
         awayStats.avgPossession,
         homeStats.avgShotsOnTarget,
-        awayStats.avgShotsOnTarget
+        awayStats.avgShotsOnTarget,
+        homeStats.avgGoalsScored,
+        homeStats.avgGoalsConceded,
+        awayStats.avgGoalsScored,
+        awayStats.avgGoalsConceded,
+        homeStats.formPoints,
+        awayStats.formPoints
       ];
 
       const prediction = this.classifier.predict([predictionInput])[0];
       
-      // predictProbability returns a matrix (array of arrays).
-      // It expects (features, numberOfClasses)
+      // predictProbability expects (features, numberOfClasses)
       const probabilitiesArray = this.classifier.predictProbability([predictionInput], 3);
       const probabilities = (probabilitiesArray[0] as unknown) as number[];
 
-      // Update match document with prediction
       match.prediction = {
         outcome: Number(prediction),
         probabilities: {
@@ -77,5 +100,6 @@ export class PredictionEngine {
 
       await match.save();
     }
+    console.log(`Predictions updated for ${scheduledMatches.length} matches.`);
   }
 }

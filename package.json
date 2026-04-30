@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "set NODE_OPTIONS=--loader ts-node/esm && node src/server.ts",
+    "seed": "set NODE_OPTIONS=--loader ts-node/esm && node src/scripts/seed.ts",
     "build": "tsc",
     "lint": "eslint src/**",
     "test": "echo \"No tests specified yet.\""

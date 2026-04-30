@@ -140,4 +140,60 @@ export class ApiFootballService {
       console.error(`Error during match sync for date ${date}:`, error);
     }
   }
+
+  /**
+   * Fetches historical data for a specific league and season.
+   * Caution: This can consume many API requests if not limited.
+   */
+  async syncLeagueSeason(leagueId: number, season: number, limit: number = 20): Promise<void> {
+    try {
+      console.log(`Syncing league ${leagueId} season ${season}...`);
+      const response = await api.get('/fixtures', {
+        params: { league: leagueId, season }
+      });
+
+      const fixtures = response.data.response;
+      // Filter finished matches and limit them to avoid API exhaustion
+      const finishedMatches = fixtures
+        .filter((item: any) => item.fixture.status.short === 'FT')
+        .slice(-limit);
+
+      console.log(`Found ${finishedMatches.length} finished matches to sync (limit: ${limit}).`);
+
+      for (const item of finishedMatches) {
+        const fixtureId = item.fixture.id;
+        
+        // Check if we already have stats for this match
+        const existingMatch = await Match.findOne({ fixture_id: fixtureId });
+        if (existingMatch && existingMatch.stats?.home_possession) {
+          continue; // Skip if already synced
+        }
+
+        const matchData = {
+          fixture_id: fixtureId,
+          date: new Date(item.fixture.date),
+          status: 'FINISHED',
+          homeTeam: { id: item.teams.home.id, name: item.teams.home.name },
+          awayTeam: { id: item.teams.away.id, name: item.teams.away.name },
+          score: { home: item.goals.home ?? 0, away: item.goals.away ?? 0 }
+        };
+
+        await Match.findOneAndUpdate(
+          { fixture_id: fixtureId },
+          { $set: matchData },
+          { upsert: true }
+        );
+
+        // Fetch detailed stats
+        await this.syncFixtureStats(fixtureId);
+        
+        // Small delay to respect potential rate limits
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      console.log(`Historical sync for league ${leagueId} completed.`);
+    } catch (error) {
+      console.error(`Error syncing league ${leagueId}:`, error);
+    }
+  }
 }
