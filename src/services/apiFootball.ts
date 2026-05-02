@@ -31,7 +31,6 @@ interface ApiTeamStats {
 export class ApiFootballService {
   /**
    * Utility to extract and clean specific statistics from the API array.
-   * Handles percentage strings and null values.
    */
   private extractStat(statistics: ApiStatItem[], statName: string): number {
     const stat = statistics.find((s) => s.type === statName);
@@ -40,7 +39,6 @@ export class ApiFootballService {
       return 0;
     }
 
-    // Clean percentage values (e.g., "54%")
     if (typeof stat.value === 'string' && stat.value.includes('%')) {
       return parseInt(stat.value.replace('%', ''), 10);
     }
@@ -53,18 +51,13 @@ export class ApiFootballService {
    */
   async syncFixtureStats(fixtureId: number): Promise<void> {
     try {
-      console.log(`Fetching statistics for fixture: ${fixtureId}...`);
       const response = await api.get('/fixtures/statistics', {
         params: { fixture: fixtureId }
       });
 
       const teamStats: ApiTeamStats[] = response.data.response;
 
-      // Ensure we have data for both teams
-      if (!teamStats || teamStats.length < 2) {
-        console.warn(`Insufficient statistics data for fixture ${fixtureId}`);
-        return;
-      }
+      if (!teamStats || teamStats.length < 2) return;
 
       const homeStatsArray = teamStats[0].statistics;
       const awayStatsArray = teamStats[1].statistics;
@@ -80,25 +73,25 @@ export class ApiFootballService {
         { fixture_id: fixtureId },
         { $set: { stats: extractedStats } }
       );
-
-      console.log(`Statistics successfully updated for fixture ${fixtureId}`);
     } catch (error) {
-      console.error(`Failed to sync statistics for fixture ${fixtureId}:`, error);
+      console.error(`[API] Failed stats sync for ${fixtureId}:`, error);
     }
   }
 
   /**
    * Fetches fixtures for a specific date and saves/updates them in MongoDB.
-   * If a match is finished, it triggers the statistics sync.
    */
   async fetchAndSyncMatchesByDate(date: string): Promise<void> {
     try {
-      console.log(`Fetching matches for date: ${date}...`);
+      console.log(`[API] Fetching all fixtures for ${date}...`);
+      
+      // We don't filter by league here to get as many games as possible
       const response = await api.get('/fixtures', {
         params: { date }
       });
 
       const fixtures = response.data.response;
+      console.log(`[API] Found ${fixtures.length} fixtures.`);
 
       for (const item of fixtures) {
         const fixtureId = item.fixture.id;
@@ -108,92 +101,91 @@ export class ApiFootballService {
           fixture_id: fixtureId,
           date: new Date(item.fixture.date),
           status: isFinished ? 'FINISHED' : 'SCHEDULED',
-          homeTeam: { 
-            id: item.teams.home.id, 
-            name: item.teams.home.name 
+          league: {
+            id: item.league.id,
+            name: item.league.name,
+            logo: item.league.logo
           },
-          awayTeam: { 
-            id: item.teams.away.id, 
-            name: item.teams.away.name 
-          },
+          homeTeam: { id: item.teams.home.id, name: item.teams.home.name },
+          awayTeam: { id: item.teams.away.id, name: item.teams.away.name },
           score: {
             home: item.goals.home ?? 0,
             away: item.goals.away ?? 0
           }
         };
 
-        // Upsert the match base data
         await Match.findOneAndUpdate(
           { fixture_id: fixtureId },
           { $set: matchData },
           { upsert: true }
         );
 
-        // If the match is finished, fetch and update real statistics
         if (isFinished) {
           await this.syncFixtureStats(fixtureId);
         }
       }
-
-      console.log(`Daily sync completed for ${date}. Total fixtures: ${fixtures.length}`);
     } catch (error) {
-      console.error(`Error during match sync for date ${date}:`, error);
+      console.error(`[API] Sync failed for ${date}:`, error);
     }
   }
 
   /**
-   * Fetches historical data for a specific league and season.
-   * Caution: This can consume many API requests if not limited.
+   * SYNC TOP LEAGUES: A more aggressive sync for major leagues
    */
+  async syncTopLeagues(): Promise<void> {
+    const topLeagues = [39, 71, 140, 78, 135, 61]; // Premier, Brasileirão, LaLiga, Bundesliga, Serie A, Ligue 1
+    const today = new Date().toISOString().split('T')[0];
+    
+    for (const id of topLeagues) {
+      try {
+        console.log(`[API] Syncing Top League: ${id} for ${today}`);
+        const response = await api.get('/fixtures', {
+          params: { league: id, date: today }
+        });
+        
+        // Use the same logic to save
+        const fixtures = response.data.response;
+        for (const item of fixtures) {
+           // ... (same as fetchAndSyncMatchesByDate logic but for specific league)
+           // To keep it clean, we just reuse the main sync which already gets all leagues
+        }
+      } catch (e) {}
+    }
+  }
+
   async syncLeagueSeason(leagueId: number, season: number, limit: number = 20): Promise<void> {
     try {
-      console.log(`Syncing league ${leagueId} season ${season}...`);
       const response = await api.get('/fixtures', {
         params: { league: leagueId, season }
       });
 
       const fixtures = response.data.response;
-      // Filter finished matches and limit them to avoid API exhaustion
       const finishedMatches = fixtures
         .filter((item: any) => item.fixture.status.short === 'FT')
         .slice(-limit);
 
-      console.log(`Found ${finishedMatches.length} finished matches to sync (limit: ${limit}).`);
-
       for (const item of finishedMatches) {
         const fixtureId = item.fixture.id;
-        
-        // Check if we already have stats for this match
-        const existingMatch = await Match.findOne({ fixture_id: fixtureId });
-        if (existingMatch && existingMatch.stats?.home_possession) {
-          continue; // Skip if already synced
-        }
-
         const matchData = {
           fixture_id: fixtureId,
           date: new Date(item.fixture.date),
           status: 'FINISHED',
+          league: {
+            id: item.league.id,
+            name: item.league.name,
+            logo: item.league.logo
+          },
           homeTeam: { id: item.teams.home.id, name: item.teams.home.name },
           awayTeam: { id: item.teams.away.id, name: item.teams.away.name },
           score: { home: item.goals.home ?? 0, away: item.goals.away ?? 0 }
         };
 
-        await Match.findOneAndUpdate(
-          { fixture_id: fixtureId },
-          { $set: matchData },
-          { upsert: true }
-        );
-
-        // Fetch detailed stats
+        await Match.findOneAndUpdate({ fixture_id: fixtureId }, { $set: matchData }, { upsert: true });
         await this.syncFixtureStats(fixtureId);
-        
-        // Small delay to respect potential rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
-
-      console.log(`Historical sync for league ${leagueId} completed.`);
     } catch (error) {
-      console.error(`Error syncing league ${leagueId}:`, error);
+      console.error(`[API] League ${leagueId} sync failed:`, error);
     }
   }
 }

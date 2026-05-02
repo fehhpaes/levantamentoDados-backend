@@ -9,18 +9,51 @@ const predictionEngine = new PredictionEngine();
 
 export const getTodayMatches = async (req: Request, res: Response) => {
   try {
+    const { league_id } = req.query;
     const now = new Date();
-    // Busca jogos que começaram há 3 horas até os que vão começar nas próximas 21 horas
     const startTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
     const endTime = new Date(now.getTime() + 21 * 60 * 60 * 1000);
 
-    const matches = await Match.find({
+    const query: any = {
       date: { $gte: startTime, $lt: endTime }
-    }).sort({ date: 1 });
+    };
+
+    if (league_id) {
+      query['league.id'] = Number(league_id);
+    }
+
+    const matches = await Match.find(query).sort({ date: 1 });
 
     res.json(matches);
   } catch {
     res.status(500).json({ error: 'Failed to fetch matches' });
+  }
+};
+
+export const getLeagues = async (req: Request, res: Response) => {
+  try {
+    // Get unique leagues from the Match collection
+    const leagues = await Match.aggregate([
+      {
+        $group: {
+          _id: '$league.id',
+          name: { $first: '$league.name' },
+          logo: { $first: '$league.logo' }
+        }
+      },
+      {
+        $project: {
+          id: '$_id',
+          name: 1,
+          logo: 1,
+          _id: 0
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
+    res.json(leagues);
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch leagues' });
   }
 };
 

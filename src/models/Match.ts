@@ -4,6 +4,7 @@ export interface IMatch extends Document {
   fixture_id: number;
   date: Date;
   status: 'SCHEDULED' | 'FINISHED';
+  league: { id: number; name: string; logo?: string };
   homeTeam: { id: number; name: string };
   awayTeam: { id: number; name: string };
   score: { home: number; away: number };
@@ -27,6 +28,11 @@ const MatchSchema: Schema = new Schema({
   fixture_id: { type: Number, required: true, unique: true },
   date: { type: Date, required: true },
   status: { type: String, enum: ['SCHEDULED', 'FINISHED'], required: true },
+  league: {
+    id: { type: Number, required: true },
+    name: { type: String, required: true },
+    logo: String
+  },
   homeTeam: {
     id: { type: Number, required: true },
     name: { type: String, required: true }
