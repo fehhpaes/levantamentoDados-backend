@@ -62,14 +62,6 @@ export const getMatchHistory = async (req: Request, res: Response) => {
 
 export const triggerManualSync = async (req: Request, res: Response) => {
   try {
-    const queryKey = (req.query.key as string || '').trim();
-    const serverSecret = (process.env.CRON_SECRET || 'super-secret-key').trim();
-
-    if (!queryKey || queryKey !== serverSecret) {
-      console.warn(`[Manual Sync] Unauthorized access attempt with key: ${queryKey}`);
-      return res.status(401).json({ error: 'Unauthorized: Invalid cron key' });
-    }
-
     const today = new Date().toISOString().split('T')[0];
     console.log(`[Manual Sync] Starting sync for ${today}...`);
 
