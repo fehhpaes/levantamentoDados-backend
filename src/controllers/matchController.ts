@@ -9,13 +9,13 @@ const predictionEngine = new PredictionEngine();
 
 export const getTodayMatches = async (req: Request, res: Response) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const now = new Date();
+    // Busca jogos que começaram há 3 horas até os que vão começar nas próximas 21 horas
+    const startTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const endTime = new Date(now.getTime() + 21 * 60 * 60 * 1000);
 
     const matches = await Match.find({
-      date: { $gte: today, $lt: tomorrow }
+      date: { $gte: startTime, $lt: endTime }
     }).sort({ date: 1 });
 
     res.json(matches);
