@@ -35,6 +35,11 @@ export const getLeagues = async (req: Request, res: Response) => {
     // Get unique leagues from the Match collection
     const leagues = await Match.aggregate([
       {
+        $match: {
+          'league.id': { $ne: null }
+        }
+      },
+      {
         $group: {
           _id: '$league.id',
           name: { $first: '$league.name' },
