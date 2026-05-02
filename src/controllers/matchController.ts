@@ -61,17 +61,26 @@ export const getMatchHistory = async (req: Request, res: Response) => {
 };
 
 export const triggerManualSync = async (req: Request, res: Response) => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    console.log(`[Manual Sync] Starting sync for ${today}...`);
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Respond immediately to prevent timeout
+  res.json({ 
+    message: `Sync process started in background for ${today}`,
+    status: 'processing'
+  });
 
-    await footballService.fetchAndSyncMatchesByDate(today);
-    await predictionEngine.trainModel();
-    await predictionEngine.predictScheduledMatches();
+  // Run the heavy tasks without 'awaiting' the response
+  (async () => {
+    try {
+      console.log(`[Manual Sync] Background process started for ${today}...`);
 
-    res.json({ message: `Sync completed for ${today}` });
-  } catch (error) {
-    console.error('[Manual Sync] Error:', error);
-    res.status(500).json({ error: 'Manual sync failed' });
-  }
+      await footballService.fetchAndSyncMatchesByDate(today);
+      await predictionEngine.trainModel();
+      await predictionEngine.predictScheduledMatches();
+
+      console.log(`[Manual Sync] Background process completed for ${today}`);
+    } catch (error) {
+      console.error('[Manual Sync] Background process failed:', error);
+    }
+  })();
 };
