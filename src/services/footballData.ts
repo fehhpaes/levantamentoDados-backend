@@ -20,11 +20,64 @@ export class FootballDataService {
    */
   private async handleRateLimit(headers: any): Promise<void> {
     const requestsRemaining = parseInt(headers['x-requests-available-minute'] || '10', 10);
-    
-    // If we have 1 or 0 requests left in the minute, wait to avoid 429
     if (requestsRemaining <= 1) {
       console.log('[Football-Data] Rate limit near. Waiting 10 seconds...');
       await new Promise(resolve => setTimeout(resolve, 10000));
+    }
+  }
+
+  /**
+   * Private helper to map and save match data consistently.
+   */
+  private async saveMatchData(item: any, competition?: any): Promise<boolean> {
+    try {
+      const fixtureId = Number(item.id || 0);
+      if (fixtureId === 0) return false;
+
+      const status = item.status === 'FINISHED' ? 'FINISHED' : 'SCHEDULED';
+      
+      // Use competition from item or fallback to provided competition object
+      const compInfo = item.competition || competition || {};
+
+      const matchData = {
+        fixture_id: fixtureId,
+        date: new Date(item.utcDate || new Date()),
+        status: status,
+        league: {
+          id: Number(compInfo.id || 0),
+          name: compInfo.name || 'Liga Desconhecida',
+          logo: compInfo.emblem || ''
+        },
+        homeTeam: { 
+          id: Number(item.homeTeam?.id || 0), 
+          name: item.homeTeam?.shortName || item.homeTeam?.name || 'Time Casa',
+          logo: item.homeTeam?.crest || ''
+        },
+        awayTeam: { 
+          id: Number(item.awayTeam?.id || 0), 
+          name: item.awayTeam?.shortName || item.awayTeam?.name || 'Time Fora',
+          logo: item.awayTeam?.crest || ''
+        },
+        score: {
+          home: Number(item.score?.fullTime?.home ?? 0),
+          away: Number(item.score?.fullTime?.away ?? 0)
+        }
+      };
+
+      const result = await Match.findOneAndUpdate(
+        { fixture_id: fixtureId },
+        { $set: matchData },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      
+      if (result) {
+        console.log(`[Football-Data] SAVED: ${matchData.homeTeam.name} vs ${matchData.awayTeam.name} (${fixtureId})`);
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.error(`[Football-Data] ERROR SAVING ID ${item.id}:`, error.message);
+      return false;
     }
   }
 
@@ -33,76 +86,24 @@ export class FootballDataService {
    */
   async fetchAndSyncMatches(dateFrom: string, dateTo: string): Promise<void> {
     try {
-      console.log(`[Football-Data] Fetching fixtures from ${dateFrom} to ${dateTo}...`);
-      
-      const response = await api.get('/matches', {
-        params: { dateFrom, dateTo }
-      });
-
-      // Handle Throttling based on headers
+      console.log(`[Football-Data] Fetching ALL fixtures from ${dateFrom} to ${dateTo}...`);
+      const response = await api.get('/matches', { params: { dateFrom, dateTo } });
       await this.handleRateLimit(response.headers);
 
       const matches = response.data.matches;
-      if (!matches) {
-        console.warn('[Football-Data] No matches found in response.');
+      if (!matches || matches.length === 0) {
+        console.warn('[Football-Data] No matches found for the period.');
         return;
       }
 
-      console.log(`[Football-Data] Found ${matches.length} matches.`);
-
+      let savedCount = 0;
       for (const item of matches) {
-        const fixtureId = Number(item.id || 0);
-        if (fixtureId === 0) continue;
-
-        const status = item.status === 'FINISHED' ? 'FINISHED' : 'SCHEDULED';
-        
-        const matchData = {
-          fixture_id: fixtureId,
-          date: new Date(item.utcDate || new Date()),
-          status: status,
-          league: {
-            id: Number(item.competition?.id || 0),
-            name: item.competition?.name || 'Liga Desconhecida',
-            logo: item.competition?.emblem || ''
-          },
-          homeTeam: { 
-            id: Number(item.homeTeam?.id || 0), 
-            name: item.homeTeam?.shortName || item.homeTeam?.name || 'Time Casa',
-            logo: item.homeTeam?.crest || ''
-          },
-          awayTeam: { 
-            id: Number(item.awayTeam?.id || 0), 
-            name: item.awayTeam?.shortName || item.awayTeam?.name || 'Time Fora',
-            logo: item.awayTeam?.crest || ''
-          },
-          score: {
-            home: Number(item.score?.fullTime?.home ?? 0),
-            away: Number(item.score?.fullTime?.away ?? 0)
-          }
-        };
-
-        try {
-          // Usando validateBeforeSave: false para garantir a entrada inicial
-          const result = await Match.findOneAndUpdate(
-            { fixture_id: fixtureId },
-            { $set: matchData },
-            { upsert: true, new: true, setDefaultsOnInsert: true }
-          );
-          
-          if (result) {
-            console.log(`[Football-Data] SUCCESS: Saved ${matchData.homeTeam.name} vs ${matchData.awayTeam.name}`);
-          }
-        } catch (dbError: any) {
-          console.error(`[Football-Data] DB WRITE FAILED for ID ${fixtureId}:`, dbError.message);
-        }
+        const success = await this.saveMatchData(item);
+        if (success) savedCount++;
       }
-      console.log('[Football-Data] Sync completed successfully.');
+      console.log(`[Football-Data] Sync finished. Total saved: ${savedCount}`);
     } catch (error: any) {
-      if (error.response?.status === 429) {
-        console.error('[Football-Data] Rate limit exceeded (10 req/min).');
-      } else {
-        console.error(`[Football-Data] Sync failed:`, error.message);
-      }
+      console.error(`[Football-Data] Global sync failed:`, error.message);
     }
   }
 
@@ -112,61 +113,25 @@ export class FootballDataService {
   async syncCompetitionMatches(competitionCode: string, dateFrom: string, dateTo: string): Promise<void> {
     try {
       console.log(`[Football-Data] Syncing ${competitionCode} from ${dateFrom} to ${dateTo}...`);
-      
       const response = await api.get(`/competitions/${competitionCode}/matches`, {
         params: { dateFrom, dateTo }
       });
-
       await this.handleRateLimit(response.headers);
 
       const matches = response.data.matches;
+      const competition = response.data.competition; // Get root competition info
+
       if (!matches || matches.length === 0) {
         console.log(`[Football-Data] No matches found for ${competitionCode}.`);
         return;
       }
 
+      let savedCount = 0;
       for (const item of matches) {
-        const fixtureId = item.id;
-        const status = item.status === 'FINISHED' ? 'FINISHED' : 'SCHEDULED';
-        
-        const matchData = {
-          fixture_id: fixtureId,
-          date: new Date(item.utcDate),
-          status: status,
-          league: {
-            id: item.competition.id,
-            name: item.competition.name,
-            logo: item.competition.emblem
-          },
-          homeTeam: { 
-            id: item.homeTeam.id, 
-            name: item.homeTeam.shortName || item.homeTeam.name,
-            logo: item.homeTeam.crest
-          },
-          awayTeam: { 
-            id: item.awayTeam.id, 
-            name: item.awayTeam.shortName || item.awayTeam.name,
-            logo: item.awayTeam.crest
-          },
-          score: {
-            home: item.score.fullTime.home ?? 0,
-            away: item.score.fullTime.away ?? 0
-          }
-        };
-
-        const result = await Match.findOneAndUpdate(
-          { fixture_id: fixtureId },
-          { $set: matchData },
-          { upsert: true, new: true }
-        );
-
-        if (result) {
-          console.log(`[Football-Data] [${competitionCode}] Saved: ${matchData.homeTeam.name} vs ${matchData.awayTeam.name} (ID: ${fixtureId})`);
-        } else {
-          console.error(`[Football-Data] [${competitionCode}] Failed to save ID: ${fixtureId}`);
-        }
+        const success = await this.saveMatchData(item, competition);
+        if (success) savedCount++;
       }
-      console.log(`[Football-Data] ${competitionCode} sync completed.`);
+      console.log(`[Football-Data] ${competitionCode} sync finished. Saved: ${savedCount}`);
     } catch (error: any) {
       console.error(`[Football-Data] ${competitionCode} sync failed:`, error.message);
     }

@@ -44,6 +44,21 @@ export const testDatabaseWrite = async (req: Request, res: Response) => {
   }
 };
 
+export const clearDatabase = async (req: Request, res: Response) => {
+  try {
+    await Match.deleteMany({});
+    // Also clear TeamTest just in case
+    await TeamTest.deleteMany({});
+    
+    res.json({ 
+      success: true, 
+      message: 'Banco de dados de partidas limpo com sucesso! Você pode iniciar uma nova sincronização.' 
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 export const getSyncStatus = async (req: Request, res: Response) => {
   res.json(syncState);
 };

@@ -10,6 +10,7 @@ router.get('/team/:team_id', getTeamStats);
 router.get('/sync', triggerManualSync); 
 router.get('/sync-status', getSyncStatus); 
 router.get('/db-test', testDatabaseWrite); 
+router.get('/clear', clearDatabase); 
 router.get('/ping', (req, res) => { res.json({ status: 'online', time: new Date() }); });
 router.get('/:fixture_id', getMatchById);
 
