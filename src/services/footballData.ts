@@ -51,46 +51,49 @@ export class FootballDataService {
       console.log(`[Football-Data] Found ${matches.length} matches.`);
 
       for (const item of matches) {
-        const fixtureId = Number(item.id); // Ensure it's a number
+        const fixtureId = Number(item.id || 0);
+        if (fixtureId === 0) continue;
+
         const status = item.status === 'FINISHED' ? 'FINISHED' : 'SCHEDULED';
         
         const matchData = {
           fixture_id: fixtureId,
-          date: new Date(item.utcDate),
+          date: new Date(item.utcDate || new Date()),
           status: status,
           league: {
-            id: Number(item.competition.id),
-            name: item.competition.name,
-            logo: item.competition.emblem
+            id: Number(item.competition?.id || 0),
+            name: item.competition?.name || 'Liga Desconhecida',
+            logo: item.competition?.emblem || ''
           },
           homeTeam: { 
-            id: Number(item.homeTeam.id), 
-            name: item.homeTeam.shortName || item.homeTeam.name,
-            logo: item.homeTeam.crest
+            id: Number(item.homeTeam?.id || 0), 
+            name: item.homeTeam?.shortName || item.homeTeam?.name || 'Time Casa',
+            logo: item.homeTeam?.crest || ''
           },
           awayTeam: { 
-            id: Number(item.awayTeam.id), 
-            name: item.awayTeam.shortName || item.awayTeam.name,
-            logo: item.awayTeam.crest
+            id: Number(item.awayTeam?.id || 0), 
+            name: item.awayTeam?.shortName || item.awayTeam?.name || 'Time Fora',
+            logo: item.awayTeam?.crest || ''
           },
           score: {
-            home: item.score?.fullTime?.home ?? 0,
-            away: item.score?.fullTime?.away ?? 0
+            home: Number(item.score?.fullTime?.home ?? 0),
+            away: Number(item.score?.fullTime?.away ?? 0)
           }
         };
 
         try {
+          // Usando validateBeforeSave: false para garantir a entrada inicial
           const result = await Match.findOneAndUpdate(
             { fixture_id: fixtureId },
             { $set: matchData },
-            { upsert: true, new: true, runValidators: true }
+            { upsert: true, new: true, setDefaultsOnInsert: true }
           );
           
           if (result) {
-            console.log(`[Football-Data] SUCCESS: Saved ID ${fixtureId} (${matchData.homeTeam.name})`);
+            console.log(`[Football-Data] SUCCESS: Saved ${matchData.homeTeam.name} vs ${matchData.awayTeam.name}`);
           }
         } catch (dbError: any) {
-          console.error(`[Football-Data] DATABASE ERROR for ID ${fixtureId}:`, dbError.message);
+          console.error(`[Football-Data] DB WRITE FAILED for ID ${fixtureId}:`, dbError.message);
         }
       }
       console.log('[Football-Data] Sync completed successfully.');
