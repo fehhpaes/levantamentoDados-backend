@@ -9,6 +9,8 @@ const footballService = new ApiFootballService();
 const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
 
+import { TeamTest } from '../models/TeamTest.js';
+
 // Global state to track sync progress (in-memory)
 let syncState = {
   isSyncing: false,
@@ -16,6 +18,30 @@ let syncState = {
   currentTask: '',
   lastSync: null as Date | null,
   leaguesProcessed: [] as string[]
+};
+
+export const testDatabaseWrite = async (req: Request, res: Response) => {
+  try {
+    const testId = `test_${Date.now()}`;
+    const newEntry = new TeamTest({
+      name: 'Teste de Conexão',
+      code: testId
+    });
+    
+    await newEntry.save();
+    res.json({ 
+      success: true, 
+      message: 'Escrita no banco de dados realizada com sucesso!',
+      data: newEntry 
+    });
+  } catch (error: any) {
+    console.error('[DB Test] Write failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Falha ao escrever no banco de dados', 
+      error: error.message 
+    });
+  }
 };
 
 export const getSyncStatus = async (req: Request, res: Response) => {
