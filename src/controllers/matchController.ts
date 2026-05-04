@@ -117,23 +117,24 @@ export const triggerManualSync = async (req: Request, res: Response) => {
     return res.status(409).json({ message: 'Sync already in progress' });
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
   
-  // Respond immediately to prevent timeout
+  // Expand window for manual sync to catch recent and next day matches
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  
   res.json({ 
-    message: `Sync process started for ${today}. Checking all leagues sequentially...`,
+    message: `Sync process started. Populating matches for the current period...`,
     status: 'processing'
   });
 
-  // Run the staggered sync logic in background
   (async () => {
     try {
       syncState.isSyncing = true;
       syncState.progress = 0;
-      syncState.currentTask = 'Iniciando sincronização...';
+      syncState.currentTask = 'Iniciando sincronização (Janela de 3 dias)...';
 
-      console.log(`[Manual Sync] Starting staggered sync for ${today}...`);
-      
       const competitions = [
         { name: 'Brasileirão Série A', code: 'BSA' },
         { name: 'Premier League', code: 'PL' },
@@ -146,18 +147,16 @@ export const triggerManualSync = async (req: Request, res: Response) => {
       for (let i = 0; i < competitions.length; i++) {
         const comp = competitions[i];
         syncState.currentTask = `Sincronizando ${comp.name}...`;
-        syncState.progress = Math.round(((i) / (competitions.length + 2)) * 100);
+        syncState.progress = Math.round(((i) / (competitions.length + 1)) * 100);
         
-        console.log(`[Manual Sync] Syncing ${comp.name}...`);
-        await footballDataService.syncCompetitionMatches(comp.code, today, today);
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Sync yesterday, today and tomorrow for each competition
+        await footballDataService.syncCompetitionMatches(comp.code, yesterday, tomorrow);
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
-      syncState.currentTask = 'Finalizando e processando IA...';
-      syncState.progress = 90;
+      syncState.currentTask = 'Processando IA e Estatísticas...';
+      syncState.progress = 95;
       
-      console.log(`[Manual Sync] Running final fallback and AI processing...`);
-      await footballDataService.syncTodayMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
 
@@ -165,12 +164,9 @@ export const triggerManualSync = async (req: Request, res: Response) => {
       syncState.progress = 100;
       syncState.currentTask = 'Sincronização concluída!';
       syncState.lastSync = new Date();
-
-      console.log(`[Manual Sync] Manual sync completed successfully.`);
     } catch (error) {
       syncState.isSyncing = false;
       syncState.currentTask = 'Erro na sincronização';
-      console.error('[Manual Sync] Background process failed:', error);
     }
   })();
 };
