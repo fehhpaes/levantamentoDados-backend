@@ -85,7 +85,6 @@ export class ApiFootballService {
     try {
       console.log(`[API] Fetching all fixtures for ${date}...`);
       
-      // We don't filter by league here to get as many games as possible
       const response = await api.get('/fixtures', {
         params: { date }
       });
