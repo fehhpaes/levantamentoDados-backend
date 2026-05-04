@@ -2,9 +2,11 @@ import { Request, Response } from 'express';
 import { Match } from '../models/Match.js';
 import { getTeamMovingAverage } from '../utils/statsCalculator.js';
 import { ApiFootballService } from '../services/apiFootball.js';
+import { FootballDataService } from '../services/footballData.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 
 const footballService = new ApiFootballService();
+const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
 
 export const getTodayMatches = async (req: Request, res: Response) => {
@@ -103,7 +105,7 @@ export const triggerManualSync = async (req: Request, res: Response) => {
   
   // Respond immediately to prevent timeout
   res.json({ 
-    message: `Sync process started in background for ${today}`,
+    message: `Sync process started in background for ${today} using Football-Data.org`,
     status: 'processing'
   });
 
@@ -112,7 +114,10 @@ export const triggerManualSync = async (req: Request, res: Response) => {
     try {
       console.log(`[Manual Sync] Background process started for ${today}...`);
 
-      await footballService.fetchAndSyncMatchesByDate(today);
+      // Use Football-Data for basic match info
+      await footballDataService.syncTodayMatches();
+      
+      // Try to train and predict (Note: Football-Data has limited history on free tier)
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
 

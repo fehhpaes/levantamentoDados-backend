@@ -1,8 +1,8 @@
 import cron from 'node-cron';
-import { ApiFootballService } from '../services/apiFootball.js';
+import { FootballDataService } from '../services/footballData.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 
-const footballService = new ApiFootballService();
+const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
 
 /**
@@ -10,7 +10,7 @@ const predictionEngine = new PredictionEngine();
  * updating predictions automatically.
  */
 export const startUpdateWorker = () => {
-  console.log('--- Match Update Worker Started ---');
+  console.log('--- Match Update Worker Started (Football-Data.org) ---');
 
   /**
    * Schedule: Every day at 02:00 AM
@@ -22,8 +22,8 @@ export const startUpdateWorker = () => {
     console.log(`[Worker] Starting scheduled sync for ${today}...`);
 
     try {
-      // 1. Synchronize matches and their real statistics
-      await footballService.fetchAndSyncMatchesByDate(today);
+      // 1. Synchronize matches using Football-Data.org
+      await footballDataService.syncTodayMatches();
 
       // 2. Re-train the Machine Learning model with the latest results
       console.log('[Worker] Re-training Prediction Engine...');
@@ -46,7 +46,7 @@ export const startUpdateWorker = () => {
     const today = new Date().toISOString().split('T')[0];
     console.log(`[Worker] Performing initial startup sync for ${today}...`);
     try {
-      await footballService.fetchAndSyncMatchesByDate(today);
+      await footballDataService.syncTodayMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
     } catch (error) {
