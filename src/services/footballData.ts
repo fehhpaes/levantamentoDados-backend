@@ -51,7 +51,7 @@ export class FootballDataService {
       console.log(`[Football-Data] Found ${matches.length} matches.`);
 
       for (const item of matches) {
-        const fixtureId = item.id;
+        const fixtureId = Number(item.id); // Ensure it's a number
         const status = item.status === 'FINISHED' ? 'FINISHED' : 'SCHEDULED';
         
         const matchData = {
@@ -59,36 +59,38 @@ export class FootballDataService {
           date: new Date(item.utcDate),
           status: status,
           league: {
-            id: item.competition.id,
+            id: Number(item.competition.id),
             name: item.competition.name,
             logo: item.competition.emblem
           },
           homeTeam: { 
-            id: item.homeTeam.id, 
+            id: Number(item.homeTeam.id), 
             name: item.homeTeam.shortName || item.homeTeam.name,
             logo: item.homeTeam.crest
           },
           awayTeam: { 
-            id: item.awayTeam.id, 
+            id: Number(item.awayTeam.id), 
             name: item.awayTeam.shortName || item.awayTeam.name,
             logo: item.awayTeam.crest
           },
           score: {
-            home: item.score.fullTime.home ?? 0,
-            away: item.score.fullTime.away ?? 0
+            home: item.score?.fullTime?.home ?? 0,
+            away: item.score?.fullTime?.away ?? 0
           }
         };
 
-        const result = await Match.findOneAndUpdate(
-          { fixture_id: fixtureId },
-          { $set: matchData },
-          { upsert: true, new: true }
-        );
-        
-        if (result) {
-          console.log(`[Football-Data] Saved match: ${matchData.homeTeam.name} vs ${matchData.awayTeam.name} (ID: ${fixtureId})`);
-        } else {
-          console.error(`[Football-Data] Failed to save match ID: ${fixtureId}`);
+        try {
+          const result = await Match.findOneAndUpdate(
+            { fixture_id: fixtureId },
+            { $set: matchData },
+            { upsert: true, new: true, runValidators: true }
+          );
+          
+          if (result) {
+            console.log(`[Football-Data] SUCCESS: Saved ID ${fixtureId} (${matchData.homeTeam.name})`);
+          }
+        } catch (dbError: any) {
+          console.error(`[Football-Data] DATABASE ERROR for ID ${fixtureId}:`, dbError.message);
         }
       }
       console.log('[Football-Data] Sync completed successfully.');
