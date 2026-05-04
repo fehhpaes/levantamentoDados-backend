@@ -63,10 +63,19 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 
 export const getTodayMatches = async (req: Request, res: Response) => {
   try {
-    const { league_id } = req.query;
+    const { league_id, date_type } = req.query;
     const now = new Date();
-    const startTime = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    const endTime = new Date(now.getTime() + 21 * 60 * 60 * 1000);
+    
+    let startTime = new Date(now.setHours(0, 0, 0, 0));
+    let endTime = new Date(now.setHours(23, 59, 59, 999));
+
+    if (date_type === 'yesterday') {
+      startTime.setDate(startTime.getDate() - 1);
+      endTime.setDate(endTime.getDate() - 1);
+    } else if (date_type === 'tomorrow') {
+      startTime.setDate(startTime.getDate() + 1);
+      endTime.setDate(endTime.getDate() + 1);
+    }
 
     const query: any = {
       date: { $gte: startTime, $lt: endTime }
@@ -81,6 +90,30 @@ export const getTodayMatches = async (req: Request, res: Response) => {
     res.json(matches);
   } catch {
     res.status(500).json({ error: 'Failed to fetch matches' });
+  }
+};
+
+export const getTopPredictions = async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const startTime = new Date(now.setHours(0, 0, 0, 0));
+    // Look for matches from today onwards
+    
+    const matches = await Match.find({
+      status: 'SCHEDULED',
+      date: { $gte: startTime },
+      'prediction.probabilities': { $exists: true }
+    });
+
+    const sortedMatches = matches.sort((a, b) => {
+      const aMaxProb = Math.max(a.prediction!.probabilities.homeWin, a.prediction!.probabilities.awayWin);
+      const bMaxProb = Math.max(b.prediction!.probabilities.homeWin, b.prediction!.probabilities.awayWin);
+      return bMaxProb - aMaxProb;
+    }).slice(0, 5);
+
+    res.json(sortedMatches);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch top predictions' });
   }
 };
 
