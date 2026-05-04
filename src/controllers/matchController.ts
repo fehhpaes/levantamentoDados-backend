@@ -1,11 +1,9 @@
 import { Request, Response } from 'express';
 import { Match } from '../models/Match.js';
 import { getTeamMovingAverage } from '../utils/statsCalculator.js';
-import { ApiFootballService } from '../services/apiFootball.js';
 import { FootballDataService } from '../services/footballData.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 
-const footballService = new ApiFootballService();
 const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
 
