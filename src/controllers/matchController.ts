@@ -14,7 +14,8 @@ let syncState = {
   isSyncing: false,
   progress: 0,
   currentTask: '',
-  lastSync: null as Date | null
+  lastSync: null as Date | null,
+  leaguesProcessed: [] as string[]
 };
 
 export const getSyncStatus = async (req: Request, res: Response) => {
@@ -134,6 +135,7 @@ export const triggerManualSync = async (req: Request, res: Response) => {
       syncState.isSyncing = true;
       syncState.progress = 0;
       syncState.currentTask = 'Iniciando sincronização (Janela de 3 dias)...';
+      syncState.leaguesProcessed = [];
 
       const competitions = [
         { name: 'Brasileirão Série A', code: 'BSA' },
@@ -151,6 +153,7 @@ export const triggerManualSync = async (req: Request, res: Response) => {
         
         // Sync yesterday, today and tomorrow for each competition
         await footballDataService.syncCompetitionMatches(comp.code, yesterday, tomorrow);
+        syncState.leaguesProcessed.push(comp.name);
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
 

@@ -79,11 +79,17 @@ export class FootballDataService {
           }
         };
 
-        await Match.findOneAndUpdate(
+        const result = await Match.findOneAndUpdate(
           { fixture_id: fixtureId },
           { $set: matchData },
-          { upsert: true }
+          { upsert: true, new: true }
         );
+        
+        if (result) {
+          console.log(`[Football-Data] Saved match: ${matchData.homeTeam.name} vs ${matchData.awayTeam.name} (ID: ${fixtureId})`);
+        } else {
+          console.error(`[Football-Data] Failed to save match ID: ${fixtureId}`);
+        }
       }
       console.log('[Football-Data] Sync completed successfully.');
     } catch (error: any) {
@@ -143,11 +149,17 @@ export class FootballDataService {
           }
         };
 
-        await Match.findOneAndUpdate(
+        const result = await Match.findOneAndUpdate(
           { fixture_id: fixtureId },
           { $set: matchData },
-          { upsert: true }
+          { upsert: true, new: true }
         );
+
+        if (result) {
+          console.log(`[Football-Data] [${competitionCode}] Saved: ${matchData.homeTeam.name} vs ${matchData.awayTeam.name} (ID: ${fixtureId})`);
+        } else {
+          console.error(`[Football-Data] [${competitionCode}] Failed to save ID: ${fixtureId}`);
+        }
       }
       console.log(`[Football-Data] ${competitionCode} sync completed.`);
     } catch (error: any) {
