@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTodayMatches, getMatchById, getMatchHistory, getTeamStats, triggerManualSync, getLeagues, getSyncStatus, testDatabaseWrite } from '../controllers/matchController.js';
+import { getTodayMatches, getMatchById, getMatchHistory, getTeamStats, triggerManualSync, getLeagues, getSyncStatus, testDatabaseWrite, clearDatabase } from '../controllers/matchController.js';
 
 const router = Router();
 
