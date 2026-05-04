@@ -62,6 +62,7 @@ export class PredictionEngine {
 
   /**
    * Predicts outcome for scheduled matches using moving averages.
+   * Now includes automated analysis generation.
    */
   async predictScheduledMatches() {
     const scheduledMatches = await Match.find({ status: 'SCHEDULED' });
@@ -85,21 +86,43 @@ export class PredictionEngine {
 
       const prediction = this.classifier.predict([predictionInput])[0];
       
-      // predictProbability expects (features, numberOfClasses)
       const probabilitiesArray = this.classifier.predictProbability([predictionInput], 3);
       const probabilities = (probabilitiesArray[0] as unknown) as number[];
 
+      // Generate Analysis Text
+      let analysis = '';
+      const outcome = Number(prediction);
+
+      if (outcome === 0) { // Home Win
+        analysis = `${match.homeTeam.name} é o favorito devido à sua forte forma recente (${homeStats.formPoints} pts) `;
+        if (homeStats.avgGoalsScored > awayStats.avgGoalsScored) {
+          analysis += `e superioridade ofensiva (${homeStats.avgGoalsScored.toFixed(1)} gols/jogo). `;
+        } else if (homeStats.avgGoalsConceded < awayStats.avgGoalsConceded) {
+          analysis += `e solidez defensiva superior. `;
+        }
+      } else if (outcome === 2) { // Away Win
+        analysis = `${match.awayTeam.name} apresenta melhores estatísticas de visitante, `;
+        if (awayStats.formPoints > homeStats.formPoints) {
+          analysis += `com um momentum superior de ${awayStats.formPoints} pontos nos últimos jogos. `;
+        } else {
+          analysis += `especialmente no volume de finalizações (${awayStats.avgShotsOnTarget.toFixed(1)} chutes no alvo). `;
+        }
+      } else { // Draw
+        analysis = "Partida equilibrada. Ambas as equipes apresentam estatísticas similares de posse e finalização, sugerindo um confronto tático truncado.";
+      }
+
       match.prediction = {
-        outcome: Number(prediction),
+        outcome: outcome,
         probabilities: {
           homeWin: probabilities[0] || 0,
           draw: probabilities[1] || 0,
           awayWin: probabilities[2] || 0
-        }
+        },
+        analysis: analysis
       };
 
       await match.save();
     }
-    console.log(`Predictions updated for ${scheduledMatches.length} matches.`);
+    console.log(`Predictions and Analysis updated for ${scheduledMatches.length} matches.`);
   }
 }

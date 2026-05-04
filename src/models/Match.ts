@@ -21,6 +21,7 @@ export interface IMatch extends Document {
       draw: number;
       awayWin: number;
     };
+    analysis?: string;
   };
 }
 
@@ -57,7 +58,8 @@ const MatchSchema: Schema = new Schema({
       homeWin: Number,
       draw: Number,
       awayWin: Number
-    }
+    },
+    analysis: String
   }
 });
 
