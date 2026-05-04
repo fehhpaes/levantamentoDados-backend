@@ -105,23 +105,38 @@ export const triggerManualSync = async (req: Request, res: Response) => {
   
   // Respond immediately to prevent timeout
   res.json({ 
-    message: `Sync process started in background for ${today} using Football-Data.org`,
+    message: `Sync process started for ${today}. Checking all leagues sequentially...`,
     status: 'processing'
   });
 
-  // Run the heavy tasks without 'awaiting' the response
+  // Run the staggered sync logic in background
   (async () => {
     try {
-      console.log(`[Manual Sync] Background process started for ${today}...`);
-
-      // Use Football-Data for basic match info
-      await footballDataService.syncTodayMatches();
+      console.log(`[Manual Sync] Starting staggered sync for ${today}...`);
       
-      // Try to train and predict (Note: Football-Data has limited history on free tier)
+      const competitions = [
+        { name: 'Brasileirão Série A', code: 'BSA' },
+        { name: 'Premier League', code: 'PL' },
+        { name: 'La Liga', code: 'PD' },
+        { name: 'Bundesliga', code: 'BL1' },
+        { name: 'Serie A (Italy)', code: 'SA' },
+        { name: 'Ligue 1 (France)', code: 'FL1' }
+      ];
+
+      for (const comp of competitions) {
+        console.log(`[Manual Sync] Syncing ${comp.name}...`);
+        await footballDataService.syncCompetitionMatches(comp.code, today, today);
+        // Wait 5 seconds between competitions to be safe with the rate limit
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+
+      // Final fallback and AI tasks
+      console.log(`[Manual Sync] Running final fallback and AI processing...`);
+      await footballDataService.syncTodayMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
 
-      console.log(`[Manual Sync] Background process completed for ${today}`);
+      console.log(`[Manual Sync] Manual sync completed successfully.`);
     } catch (error) {
       console.error('[Manual Sync] Background process failed:', error);
     }
