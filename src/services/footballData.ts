@@ -96,6 +96,66 @@ export class FootballDataService {
   }
 
   /**
+   * Syncs matches for a specific competition and date range.
+   */
+  async syncCompetitionMatches(competitionCode: string, dateFrom: string, dateTo: string): Promise<void> {
+    try {
+      console.log(`[Football-Data] Syncing ${competitionCode} from ${dateFrom} to ${dateTo}...`);
+      
+      const response = await api.get(`/competitions/${competitionCode}/matches`, {
+        params: { dateFrom, dateTo }
+      });
+
+      await this.handleRateLimit(response.headers);
+
+      const matches = response.data.matches;
+      if (!matches || matches.length === 0) {
+        console.log(`[Football-Data] No matches found for ${competitionCode}.`);
+        return;
+      }
+
+      for (const item of matches) {
+        const fixtureId = item.id;
+        const status = item.status === 'FINISHED' ? 'FINISHED' : 'SCHEDULED';
+        
+        const matchData = {
+          fixture_id: fixtureId,
+          date: new Date(item.utcDate),
+          status: status,
+          league: {
+            id: item.competition.id,
+            name: item.competition.name,
+            logo: item.competition.emblem
+          },
+          homeTeam: { 
+            id: item.homeTeam.id, 
+            name: item.homeTeam.shortName || item.homeTeam.name,
+            logo: item.homeTeam.crest
+          },
+          awayTeam: { 
+            id: item.awayTeam.id, 
+            name: item.awayTeam.shortName || item.awayTeam.name,
+            logo: item.awayTeam.crest
+          },
+          score: {
+            home: item.score.fullTime.home ?? 0,
+            away: item.score.fullTime.away ?? 0
+          }
+        };
+
+        await Match.findOneAndUpdate(
+          { fixture_id: fixtureId },
+          { $set: matchData },
+          { upsert: true }
+        );
+      }
+      console.log(`[Football-Data] ${competitionCode} sync completed.`);
+    } catch (error: any) {
+      console.error(`[Football-Data] ${competitionCode} sync failed:`, error.message);
+    }
+  }
+
+  /**
    * Syncs matches for today.
    */
   async syncTodayMatches(): Promise<void> {
