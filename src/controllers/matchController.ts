@@ -9,6 +9,18 @@ const footballService = new ApiFootballService();
 const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
 
+// Global state to track sync progress (in-memory)
+let syncState = {
+  isSyncing: false,
+  progress: 0,
+  currentTask: '',
+  lastSync: null as Date | null
+};
+
+export const getSyncStatus = async (req: Request, res: Response) => {
+  res.json(syncState);
+};
+
 export const getTodayMatches = async (req: Request, res: Response) => {
   try {
     const { league_id } = req.query;
@@ -101,6 +113,10 @@ export const getMatchHistory = async (req: Request, res: Response) => {
 };
 
 export const triggerManualSync = async (req: Request, res: Response) => {
+  if (syncState.isSyncing) {
+    return res.status(409).json({ message: 'Sync already in progress' });
+  }
+
   const today = new Date().toISOString().split('T')[0];
   
   // Respond immediately to prevent timeout
@@ -112,6 +128,10 @@ export const triggerManualSync = async (req: Request, res: Response) => {
   // Run the staggered sync logic in background
   (async () => {
     try {
+      syncState.isSyncing = true;
+      syncState.progress = 0;
+      syncState.currentTask = 'Iniciando sincronização...';
+
       console.log(`[Manual Sync] Starting staggered sync for ${today}...`);
       
       const competitions = [
@@ -123,21 +143,33 @@ export const triggerManualSync = async (req: Request, res: Response) => {
         { name: 'Ligue 1 (France)', code: 'FL1' }
       ];
 
-      for (const comp of competitions) {
+      for (let i = 0; i < competitions.length; i++) {
+        const comp = competitions[i];
+        syncState.currentTask = `Sincronizando ${comp.name}...`;
+        syncState.progress = Math.round(((i) / (competitions.length + 2)) * 100);
+        
         console.log(`[Manual Sync] Syncing ${comp.name}...`);
         await footballDataService.syncCompetitionMatches(comp.code, today, today);
-        // Wait 5 seconds between competitions to be safe with the rate limit
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
 
-      // Final fallback and AI tasks
+      syncState.currentTask = 'Finalizando e processando IA...';
+      syncState.progress = 90;
+      
       console.log(`[Manual Sync] Running final fallback and AI processing...`);
       await footballDataService.syncTodayMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
 
+      syncState.isSyncing = false;
+      syncState.progress = 100;
+      syncState.currentTask = 'Sincronização concluída!';
+      syncState.lastSync = new Date();
+
       console.log(`[Manual Sync] Manual sync completed successfully.`);
     } catch (error) {
+      syncState.isSyncing = false;
+      syncState.currentTask = 'Erro na sincronização';
       console.error('[Manual Sync] Background process failed:', error);
     }
   })();
