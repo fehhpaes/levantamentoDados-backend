@@ -118,15 +118,15 @@ export const triggerManualSync = async (req: Request, res: Response) => {
     return res.status(409).json({ message: 'Sync already in progress' });
   }
 
+  const { competitionCode } = req.query;
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
   
-  // Expand window for manual sync to catch recent and next day matches
+  // Expand window for manual sync
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
   res.json({ 
-    message: `Sync process started. Populating matches for the current period...`,
+    message: `Sync process started. Target: ${competitionCode || 'All Leagues'}`,
     status: 'processing'
   });
 
@@ -134,7 +134,6 @@ export const triggerManualSync = async (req: Request, res: Response) => {
     try {
       syncState.isSyncing = true;
       syncState.progress = 0;
-      syncState.currentTask = 'Iniciando sincronização (Janela de 3 dias)...';
       syncState.leaguesProcessed = [];
 
       const competitions = [
@@ -146,15 +145,30 @@ export const triggerManualSync = async (req: Request, res: Response) => {
         { name: 'Ligue 1 (France)', code: 'FL1' }
       ];
 
-      for (let i = 0; i < competitions.length; i++) {
-        const comp = competitions[i];
+      // Filter competitions if a specific code was provided
+      const targetCompetitions = competitionCode 
+        ? competitions.filter(c => c.code === competitionCode)
+        : competitions;
+
+      if (targetCompetitions.length === 0 && competitionCode) {
+        console.error(`[Manual Sync] Invalid competition code: ${competitionCode}`);
+        syncState.isSyncing = false;
+        syncState.currentTask = 'Código de liga inválido';
+        return;
+      }
+
+      for (let i = 0; i < targetCompetitions.length; i++) {
+        const comp = targetCompetitions[i];
         syncState.currentTask = `Sincronizando ${comp.name}...`;
-        syncState.progress = Math.round(((i) / (competitions.length + 1)) * 100);
+        syncState.progress = Math.round(((i) / (targetCompetitions.length)) * 100);
         
-        // Sync yesterday, today and tomorrow for each competition
+        console.log(`[Manual Sync] Syncing ${comp.name} (${comp.code})...`);
         await footballDataService.syncCompetitionMatches(comp.code, yesterday, tomorrow);
         syncState.leaguesProcessed.push(comp.name);
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        if (targetCompetitions.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
       }
 
       syncState.currentTask = 'Processando IA e Estatísticas...';
@@ -170,6 +184,7 @@ export const triggerManualSync = async (req: Request, res: Response) => {
     } catch (error) {
       syncState.isSyncing = false;
       syncState.currentTask = 'Erro na sincronização';
+      console.error('[Manual Sync] Failed:', error);
     }
   })();
 };
