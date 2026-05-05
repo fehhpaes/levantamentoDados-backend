@@ -4,39 +4,73 @@ import { getTeamMovingAverage } from '../utils/statsCalculator.js';
 import { calculatePoisson } from '../utils/poisson.js';
 import { getIO } from './socket.js';
 
+interface LeagueModels {
+  classifier1X2: RandomForestClassifier;
+  classifierOverUnder: RandomForestClassifier;
+  classifierBTTS: RandomForestClassifier;
+}
+
 export class PredictionEngine {
-  private classifier1X2: RandomForestClassifier;
-  private classifierOverUnder: RandomForestClassifier;
-  private classifierBTTS: RandomForestClassifier;
+  private leagueModels: Map<number, LeagueModels> = new Map();
+  private globalModels: LeagueModels;
 
   constructor() {
+    this.globalModels = this.createModelSet();
+  }
+
+  private createModelSet(): LeagueModels {
     const config = {
-      nEstimators: 200, // Increased for better stability
+      nEstimators: 200,
       seed: 42
     };
-    this.classifier1X2 = new RandomForestClassifier(config);
-    this.classifierOverUnder = new RandomForestClassifier(config);
-    this.classifierBTTS = new RandomForestClassifier(config);
+    return {
+      classifier1X2: new RandomForestClassifier(config),
+      classifierOverUnder: new RandomForestClassifier(config),
+      classifierBTTS: new RandomForestClassifier(config)
+    };
   }
 
   /**
-   * Trains the models using finished matches from the database.
+   * Trains models per league and a global fallback model.
    */
   async trainModel() {
     const historicalData = await Match.find({ status: 'FINISHED' }).sort({ date: 1 });
 
     if (historicalData.length < 20) {
-      console.warn('Insufficient data (need at least 20 finished matches) to train the models.');
+      console.warn('[PredictionEngine] Insufficient data to train the models.');
       return;
     }
 
+    // Group data by league
+    const leagueData: Map<number, any[]> = new Map();
+    historicalData.forEach(match => {
+      const list = leagueData.get(match.league.id) || [];
+      list.push(match);
+      leagueData.set(match.league.id, list);
+    });
+
+    // Train Global Model first
+    console.log('[PredictionEngine] Training Global Model...');
+    await this.trainSpecificModel(this.globalModels, historicalData);
+
+    // Train League-Specific Models
+    for (const [leagueId, matches] of leagueData.entries()) {
+      if (matches.length >= 15) { // Minimum threshold for league-specific model
+        console.log(`[PredictionEngine] Training Model for League ID: ${leagueId} (${matches.length} matches)`);
+        const models = this.createModelSet();
+        await this.trainSpecificModel(models, matches);
+        this.leagueModels.set(leagueId, models);
+      }
+    }
+  }
+
+  private async trainSpecificModel(models: LeagueModels, matches: any[]) {
     const trainingFeatures: number[][] = [];
     const labels1X2: number[] = [];
     const labelsOU: number[] = [];
     const labelsBTTS: number[] = [];
 
-    for (let i = 0; i < historicalData.length; i++) {
-      const match = historicalData[i];
+    for (const match of matches) {
       const homeStats = await getTeamMovingAverage(match.homeTeam.id);
       const awayStats = await getTeamMovingAverage(match.awayTeam.id);
 
@@ -71,11 +105,9 @@ export class PredictionEngine {
       labelsBTTS.push((match.score.home > 0 && match.score.away > 0) ? 1 : 0);
     }
 
-    this.classifier1X2.train(trainingFeatures, labels1X2);
-    this.classifierOverUnder.train(trainingFeatures, labelsOU);
-    this.classifierBTTS.train(trainingFeatures, labelsBTTS);
-    
-    console.log(`Models trained with ${trainingFeatures.length} matches.`);
+    models.classifier1X2.train(trainingFeatures, labels1X2);
+    models.classifierOverUnder.train(trainingFeatures, labelsOU);
+    models.classifierBTTS.train(trainingFeatures, labelsBTTS);
   }
 
   /**
@@ -105,29 +137,38 @@ export class PredictionEngine {
         awayStats.formPoints
       ];
 
+      // Select model (League-specific or Global)
+      const models = this.leagueModels.get(match.league.id) || this.globalModels;
+
       // 1. ML Predictions (Random Forest)
-      const rfProbs1X2 = (this.classifier1X2.predictProbability([predictionInput], 3)[0] as unknown) as number[];
-      const rfProbsOU = (this.classifierOverUnder.predictProbability([predictionInput], 2)[0] as unknown) as number[];
-      const rfProbsBTTS = (this.classifierBTTS.predictProbability([predictionInput], 2)[0] as unknown) as number[];
+      const rfProbs1X2 = (models.classifier1X2.predictProbability([predictionInput], 3)[0] as unknown) as number[];
+      const rfProbsOU = (models.classifierOverUnder.predictProbability([predictionInput], 2)[0] as unknown) as number[];
+      const rfProbsBTTS = (models.classifierBTTS.predictProbability([predictionInput], 2)[0] as unknown) as number[];
 
       // 2. Poisson Predictions
-      // Simplified xG: Avg Goals Scored by Home + Avg Goals Conceded by Away / 2
       const homeExpGoals = (homeStats.avgHomeGoalsScored + awayStats.avgAwayGoalsConceded) / 2;
       const awayExpGoals = (awayStats.avgAwayGoalsScored + homeStats.avgHomeGoalsConceded) / 2;
-      const poissonProbs = calculatePoisson(homeExpGoals, awayExpGoals);
+      const poissonResult = calculatePoisson(homeExpGoals, awayExpGoals);
 
       // 3. Blending (Weighted Average)
       const rfWeight = 0.6;
       const poissonWeight = 0.4;
 
+      const homeWin = (rfProbs1X2[0] * rfWeight) + (poissonResult.homeWin * poissonWeight);
+      const draw = (rfProbs1X2[1] * rfWeight) + (poissonResult.draw * poissonWeight);
+      const awayWin = (rfProbs1X2[2] * rfWeight) + (poissonResult.awayWin * poissonWeight);
+
       const blendedProbs = {
-        homeWin: (rfProbs1X2[0] * rfWeight) + (poissonProbs.homeWin * poissonWeight),
-        draw: (rfProbs1X2[1] * rfWeight) + (poissonProbs.draw * poissonWeight),
-        awayWin: (rfProbs1X2[2] * rfWeight) + (poissonProbs.awayWin * poissonWeight),
-        over25: (rfProbsOU[1] * rfWeight) + (poissonProbs.over25 * poissonWeight),
-        under25: (rfProbsOU[0] * rfWeight) + (poissonProbs.under25 * poissonWeight),
-        bttsYes: (rfProbsBTTS[1] * rfWeight) + (poissonProbs.bttsYes * poissonWeight),
-        bttsNo: (rfProbsBTTS[0] * rfWeight) + (poissonProbs.bttsNo * poissonWeight),
+        homeWin,
+        draw,
+        awayWin,
+        over25: (rfProbsOU[1] * rfWeight) + (poissonResult.over25 * poissonWeight),
+        under25: (rfProbsOU[0] * rfWeight) + (poissonResult.under25 * poissonWeight),
+        bttsYes: (rfProbsBTTS[1] * rfWeight) + (poissonResult.bttsYes * poissonWeight),
+        bttsNo: (rfProbsBTTS[0] * rfWeight) + (poissonResult.bttsNo * poissonWeight),
+        doubleChance1X: homeWin + draw,
+        doubleChance12: homeWin + awayWin,
+        doubleChanceX2: draw + awayWin
       };
 
       // Determine Outcome from Blended Probs
@@ -151,16 +192,9 @@ export class PredictionEngine {
 
       match.prediction = {
         outcome: outcome,
-        probabilities: {
-          homeWin: blendedProbs.homeWin,
-          draw: blendedProbs.draw,
-          awayWin: blendedProbs.awayWin,
-          over25: blendedProbs.over25,
-          under25: blendedProbs.under25,
-          bttsYes: blendedProbs.bttsYes,
-          bttsNo: blendedProbs.bttsNo
-        },
-        analysis: analysis
+        probabilities: blendedProbs,
+        analysis: analysis,
+        exactScores: poissonResult.exactScores
       };
 
       await match.save();
@@ -172,6 +206,6 @@ export class PredictionEngine {
         console.error('[PredictionEngine] Socket emit error:', socketError);
       }
     }
-    console.log(`Blended AI predictions updated for ${scheduledMatches.length} matches.`);
+    console.log(`Per-league AI predictions updated for ${scheduledMatches.length} matches.`);
   }
 }

@@ -10,6 +10,7 @@ export interface PoissonProbabilities {
   under25: number;
   bttsYes: number;
   bttsNo: number;
+  exactScores: { score: string; probability: number }[];
 }
 
 /**
@@ -32,8 +33,8 @@ function factorial(n: number): number {
  * Calculates match outcome probabilities using Poisson distribution.
  */
 export function calculatePoisson(homeExpGoals: number, awayExpGoals: number): PoissonProbabilities {
-  const maxGoals = 6; // Limit to 6 goals for performance and practicality
-  const scoreMatrix: number[][] = Array(maxGoals + 1).fill(0).map(() => Array(maxGoals + 1).fill(0));
+  const maxGoals = 6;
+  const scores: { score: string; probability: number }[] = [];
 
   let homeWin = 0;
   let draw = 0;
@@ -46,7 +47,8 @@ export function calculatePoisson(homeExpGoals: number, awayExpGoals: number): Po
   for (let h = 0; h <= maxGoals; h++) {
     for (let a = 0; a <= maxGoals; a++) {
       const prob = poisson(h, homeExpGoals) * poisson(a, awayExpGoals);
-      scoreMatrix[h][a] = prob;
+      
+      scores.push({ score: `${h}-${a}`, probability: prob });
 
       if (h > a) homeWin += prob;
       else if (h === a) draw += prob;
@@ -60,6 +62,11 @@ export function calculatePoisson(homeExpGoals: number, awayExpGoals: number): Po
     }
   }
 
+  // Get Top 5 Exact Scores
+  const exactScores = scores
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, 5);
+
   // Normalize (ensure sum of 1X2 is 1)
   const total1X2 = homeWin + draw + awayWin;
   
@@ -70,6 +77,7 @@ export function calculatePoisson(homeExpGoals: number, awayExpGoals: number): Po
     over25,
     under25,
     bttsYes,
-    bttsNo
+    bttsNo,
+    exactScores
   };
 }

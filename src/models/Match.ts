@@ -24,7 +24,11 @@ export interface IMatch extends Document {
       under25?: number;
       bttsYes?: number;
       bttsNo?: number;
+      doubleChance1X?: number;
+      doubleChance12?: number;
+      doubleChanceX2?: number;
     };
+    exactScores?: { score: string; probability: number }[];
     odds?: {
       homeWin: number;
       draw: number;
@@ -33,6 +37,9 @@ export interface IMatch extends Document {
       under25?: number;
       bttsYes?: number;
       bttsNo?: number;
+      doubleChance1X?: number;
+      doubleChance12?: number;
+      doubleChanceX2?: number;
     };
     valueBet?: {
       isFound: boolean;
@@ -79,8 +86,15 @@ const MatchSchema: Schema = new Schema({
       over25: Number,
       under25: Number,
       bttsYes: Number,
-      bttsNo: Number
+      bttsNo: Number,
+      doubleChance1X: Number,
+      doubleChance12: Number,
+      doubleChanceX2: Number
     },
+    exactScores: [{
+      score: String,
+      probability: Number
+    }],
     odds: {
       homeWin: Number,
       draw: Number,
@@ -88,7 +102,10 @@ const MatchSchema: Schema = new Schema({
       over25: Number,
       under25: Number,
       bttsYes: Number,
-      bttsNo: Number
+      bttsNo: Number,
+      doubleChance1X: Number,
+      doubleChance12: Number,
+      doubleChanceX2: Number
     },
     valueBet: {
       isFound: { type: Boolean, default: false },
