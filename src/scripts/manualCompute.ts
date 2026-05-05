@@ -8,20 +8,21 @@ dotenv.config();
 
 async function manualCompute() {
   const directUrl = "mongodb://admin:admin@ac-wkmycvl-shard-00-00.8gassal.mongodb.net:27017/sports_data?authSource=admin&ssl=true";
+  const COMP_CODE = 'CLI'; // Copa Libertadores
   
   try {
     console.log('Connecting to MongoDB (Direct Shard)...');
     await mongoose.connect(directUrl);
     console.log('Connected!');
     
-    console.log('--- Manual Computation for Arsenal vs Atleti ---');
+    console.log(`--- Manual Computation for ${COMP_CODE} ---`);
   
   const footballDataService = new FootballDataService();
   const predictionEngine = new PredictionEngine();
 
   const today = new Date().toISOString().split('T')[0];
-  console.log(`Step 1: Syncing Champions League (CL) for ${today}...`);
-  await footballDataService.syncCompetitionMatches('CL', today, today);
+  console.log(`Step 1: Syncing ${COMP_CODE} for ${today}...`);
+  await footballDataService.syncCompetitionMatches(COMP_CODE, today, today);
 
   console.log('Step 2: Training Models (if possible)...');
   await predictionEngine.trainModel();

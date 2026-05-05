@@ -13,13 +13,26 @@ async function findMatch() {
     await mongoose.connect(directUrl);
     console.log('Connected!');
 
-    const match = await Match.findOne({ fixture_id: 552095 });
+    const matches = await Match.find({
+      'league.id': 2152, // Copa Libertadores
+      date: {
+        $gte: new Date('2026-05-05T00:00:00Z'),
+        $lte: new Date('2026-05-06T23:59:59Z') // Include tomorrow as well
+      }
+    }).sort({ date: 1 });
 
-    if (match) {
-      console.log('Match details from DB:');
-      console.log(JSON.stringify(match, null, 2));
+    if (matches.length > 0) {
+      console.log(`Found ${matches.length} Libertadores matches:`);
+      matches.forEach(m => {
+        console.log(`${m.date.toISOString()} - ${m.homeTeam.name} vs ${m.awayTeam.name} [${m.status}]`);
+        if (m.prediction && m.prediction.analysis) {
+          console.log(`  Prediction: ${m.prediction.analysis}`);
+        } else {
+          console.log('  No prediction analysis found.');
+        }
+      });
     } else {
-      console.log('Specific Arsenal vs Atleti match for today not found in DB.');
+      console.log('No Libertadores matches found in DB for the specified range.');
     }
   } catch (error: any) {
     console.error('Connection failed:', error.message);
