@@ -192,9 +192,11 @@ export const getBetsReport = async (req: Request, res: Response) => {
 
         ${top5.map((m, index) => {
           const probs = m.prediction!.probabilities;
-          const bestTarget = probs.homeWin > probs.awayWin && probs.homeWin > probs.draw ? m.homeTeam.name : 
-                           (probs.awayWin > probs.homeWin && probs.awayWin > probs.draw ? m.awayTeam.name : 'Empate');
           const bestProb = Math.max(probs.homeWin, probs.awayWin, probs.draw);
+          
+          let bestTarget = 'Empate';
+          if (bestProb === probs.homeWin) bestTarget = m.homeTeam.name;
+          else if (bestProb === probs.awayWin) bestTarget = m.awayTeam.name;
 
           return `
             <div class="match-card">
