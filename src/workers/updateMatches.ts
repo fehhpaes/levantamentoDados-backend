@@ -24,8 +24,9 @@ async function syncStatsForFinishedMatches() {
   
   console.log(`[Worker] Syncing statistics for ${matchesToUpdate.length} matches...`);
   for (const m of matchesToUpdate) {
-    await sportmonksService.syncFixtureStats(m.fixture_id);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // We pass the full match object to allow searching by team names + date
+    await sportmonksService.syncStatsByMatch(m);
+    await new Promise(resolve => setTimeout(resolve, 500)); // Slightly longer delay to avoid rate limits
   }
 }
 

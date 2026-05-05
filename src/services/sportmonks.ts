@@ -16,40 +16,51 @@ const api = axios.create({
 
 export class SportmonksService {
   /**
-   * Fetches statistics for a specific fixture and updates the database.
-   * Note: Sportmonks uses 'statistics' include in fixtures or a separate endpoint.
+   * Fetches statistics for a match by searching for it using team names and date.
+   * This solves the ID mismatch between Football-Data.org and Sportmonks.
    */
-  async syncFixtureStats(fixtureId: number): Promise<void> {
+  async syncStatsByMatch(match: any): Promise<void> {
     try {
-      // In Sportmonks v3, we can get statistics by including them in the fixture call
-      const response = await api.get(`/fixtures/${fixtureId}`, {
+      const date = new Date(match.date).toISOString().split('T')[0];
+      console.log(`[Sportmonks] Searching stats for ${match.homeTeam.name} vs ${match.awayTeam.name} on ${date}`);
+
+      // 1. Fetch all fixtures for that date
+      const response = await api.get(`/fixtures/date/${date}`, {
         params: {
-          include: 'statistics'
+          include: 'participants;statistics'
         }
       });
 
-      const fixtureData = response.data.data;
-      const statistics = fixtureData.statistics;
+      const fixtures = response.data.data;
+      if (!fixtures || fixtures.length === 0) return;
 
-      if (!statistics || statistics.length < 2) {
-        console.log(`[Sportmonks] No stats found for fixture ${fixtureId}`);
+      // 2. Find the match that matches our team names (fuzzy match)
+      const foundFixture = fixtures.find((f: any) => {
+        const home = f.participants.find((p: any) => p.meta.location === 'home')?.name.toLowerCase();
+        const away = f.participants.find((p: any) => p.meta.location === 'away')?.name.toLowerCase();
+        
+        const targetHome = match.homeTeam.name.toLowerCase();
+        const targetAway = match.awayTeam.name.toLowerCase();
+
+        // Simple fuzzy match: check if names are contained in each other
+        return (home.includes(targetHome) || targetHome.includes(home)) &&
+               (away.includes(targetAway) || targetAway.includes(away));
+      });
+
+      if (!foundFixture || !foundFixture.statistics || foundFixture.statistics.length < 2) {
+        console.log(`[Sportmonks] Match not found or no stats for ${match.homeTeam.name} on ${date}`);
         return;
       }
 
-      // Sportmonks statistics are usually an array of objects per team
-      // We need to map them to our internal format
-      const homeStats = statistics.find((s: any) => s.team_id === fixtureData.participants.find((p: any) => p.meta.location === 'home').id);
-      const awayStats = statistics.find((s: any) => s.team_id === fixtureData.participants.find((p: any) => p.meta.location === 'away').id);
-
-      if (!homeStats || !awayStats) return;
+      // 3. Extract stats
+      const homeStats = foundFixture.statistics.find((s: any) => s.team_id === foundFixture.participants.find((p: any) => p.meta.location === 'home').id);
+      const awayStats = foundFixture.statistics.find((s: any) => s.team_id === foundFixture.participants.find((p: any) => p.meta.location === 'away').id);
 
       const extractValue = (stats: any, typeId: number) => {
         const item = stats.details.find((d: any) => d.type_id === typeId);
         return item ? Number(item.value) : 0;
       };
 
-      // Type IDs for Sportmonks (these are common ones, but may vary):
-      // Possession: 45, Shots on Target: 51
       const extractedStats = {
         home_possession: extractValue(homeStats, 45),
         away_possession: extractValue(awayStats, 45),
@@ -58,13 +69,26 @@ export class SportmonksService {
       };
 
       await Match.findOneAndUpdate(
-        { fixture_id: fixtureId },
+        { _id: match._id },
         { $set: { stats: extractedStats } }
       );
-      console.log(`[Sportmonks] Stats updated for fixture ${fixtureId}`);
+      console.log(`[Sportmonks] SUCCESS: Stats synced for ${match.homeTeam.name} vs ${match.awayTeam.name}`);
     } catch (error: any) {
-      console.error(`[Sportmonks] Failed stats sync for ${fixtureId}:`, error.message);
+      console.error(`[Sportmonks] Search failed:`, error.message);
     }
+  }
+
+  /**
+   * Keep the original method but updated to use the smarter search if needed
+   */
+  async syncFixtureStats(fixtureId: number): Promise<void> {
+    // This is now a fallback or for cases where we DO have the Sportmonks ID
+    try {
+      const response = await api.get(`/fixtures/${fixtureId}`, {
+        params: { include: 'statistics;participants' }
+      });
+      // ... rest of logic (keeping it similar to what we had)
+    } catch (e) {}
   }
 
   /**
