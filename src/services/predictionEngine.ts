@@ -1,6 +1,7 @@
 import { RandomForestClassifier } from 'ml-random-forest';
 import { Match } from '../models/Match.js';
 import { getTeamMovingAverage } from '../utils/statsCalculator.js';
+import { calculatePoisson } from '../utils/poisson.js';
 import { getIO } from './socket.js';
 
 export class PredictionEngine {
@@ -10,7 +11,7 @@ export class PredictionEngine {
 
   constructor() {
     const config = {
-      nEstimators: 150,
+      nEstimators: 200, // Increased for better stability
       seed: 42
     };
     this.classifier1X2 = new RandomForestClassifier(config);
@@ -48,6 +49,10 @@ export class PredictionEngine {
         homeStats.avgGoalsConceded,
         awayStats.avgGoalsScored,
         awayStats.avgGoalsConceded,
+        homeStats.avgHomeGoalsScored,
+        homeStats.avgHomeGoalsConceded,
+        awayStats.avgAwayGoalsScored,
+        awayStats.avgAwayGoalsConceded,
         homeStats.formPoints,
         awayStats.formPoints
       ];
@@ -92,43 +97,68 @@ export class PredictionEngine {
         homeStats.avgGoalsConceded,
         awayStats.avgGoalsScored,
         awayStats.avgGoalsConceded,
+        homeStats.avgHomeGoalsScored,
+        homeStats.avgHomeGoalsConceded,
+        awayStats.avgAwayGoalsScored,
+        awayStats.avgAwayGoalsConceded,
         homeStats.formPoints,
         awayStats.formPoints
       ];
 
-      // Predict 1X2
-      const outcome1X2 = Number(this.classifier1X2.predict([predictionInput])[0]);
-      const probs1X2 = (this.classifier1X2.predictProbability([predictionInput], 3)[0] as unknown) as number[];
+      // 1. ML Predictions (Random Forest)
+      const rfProbs1X2 = (this.classifier1X2.predictProbability([predictionInput], 3)[0] as unknown) as number[];
+      const rfProbsOU = (this.classifierOverUnder.predictProbability([predictionInput], 2)[0] as unknown) as number[];
+      const rfProbsBTTS = (this.classifierBTTS.predictProbability([predictionInput], 2)[0] as unknown) as number[];
 
-      // Predict Over/Under
-      const probsOU = (this.classifierOverUnder.predictProbability([predictionInput], 2)[0] as unknown) as number[];
+      // 2. Poisson Predictions
+      // Simplified xG: Avg Goals Scored by Home + Avg Goals Conceded by Away / 2
+      const homeExpGoals = (homeStats.avgHomeGoalsScored + awayStats.avgAwayGoalsConceded) / 2;
+      const awayExpGoals = (awayStats.avgAwayGoalsScored + homeStats.avgHomeGoalsConceded) / 2;
+      const poissonProbs = calculatePoisson(homeExpGoals, awayExpGoals);
 
-      // Predict BTTS
-      const probsBTTS = (this.classifierBTTS.predictProbability([predictionInput], 2)[0] as unknown) as number[];
+      // 3. Blending (Weighted Average)
+      const rfWeight = 0.6;
+      const poissonWeight = 0.4;
+
+      const blendedProbs = {
+        homeWin: (rfProbs1X2[0] * rfWeight) + (poissonProbs.homeWin * poissonWeight),
+        draw: (rfProbs1X2[1] * rfWeight) + (poissonProbs.draw * poissonWeight),
+        awayWin: (rfProbs1X2[2] * rfWeight) + (poissonProbs.awayWin * poissonWeight),
+        over25: (rfProbsOU[1] * rfWeight) + (poissonProbs.over25 * poissonWeight),
+        under25: (rfProbsOU[0] * rfWeight) + (poissonProbs.under25 * poissonWeight),
+        bttsYes: (rfProbsBTTS[1] * rfWeight) + (poissonProbs.bttsYes * poissonWeight),
+        bttsNo: (rfProbsBTTS[0] * rfWeight) + (poissonProbs.bttsNo * poissonWeight),
+      };
+
+      // Determine Outcome from Blended Probs
+      let outcome = 1; // Default Draw
+      const maxProb = Math.max(blendedProbs.homeWin, blendedProbs.draw, blendedProbs.awayWin);
+      if (maxProb === blendedProbs.homeWin) outcome = 0;
+      else if (maxProb === blendedProbs.awayWin) outcome = 2;
 
       // Generate Analysis Text
-      let analysis = '';
-      if (outcome1X2 === 0) {
-        analysis = `${match.homeTeam.name} é favorito em casa com ${homeStats.avgGoalsScored.toFixed(1)} gols/jogo. `;
-      } else if (outcome1X2 === 2) {
+      let analysis: string;
+      if (outcome === 0) {
+        analysis = `${match.homeTeam.name} é favorito em casa com ${homeStats.avgHomeGoalsScored.toFixed(1)} gols/jogo em casa. `;
+      } else if (outcome === 2) {
         analysis = `${match.awayTeam.name} tem melhor momentum como visitante. `;
       } else {
         analysis = "Confronto equilibrado com forte tendência ao empate. ";
       }
 
-      if (probsOU[1] > 0.6) analysis += "Grande probabilidade de um jogo aberto com muitos gols (+2.5). ";
-      if (probsBTTS[1] > 0.6) analysis += "Ambas as equipes devem marcar. ";
+      if (blendedProbs.over25 > 0.6) analysis += "Grande probabilidade de um jogo aberto (+2.5). ";
+      if (blendedProbs.bttsYes > 0.6) analysis += "Ambas as equipes devem marcar. ";
 
       match.prediction = {
-        outcome: outcome1X2,
+        outcome: outcome,
         probabilities: {
-          homeWin: probs1X2[0] || 0,
-          draw: probs1X2[1] || 0,
-          awayWin: probs1X2[2] || 0,
-          over25: probsOU[1] || 0,
-          under25: probsOU[0] || 0,
-          bttsYes: probsBTTS[1] || 0,
-          bttsNo: probsBTTS[0] || 0
+          homeWin: blendedProbs.homeWin,
+          draw: blendedProbs.draw,
+          awayWin: blendedProbs.awayWin,
+          over25: blendedProbs.over25,
+          under25: blendedProbs.under25,
+          bttsYes: blendedProbs.bttsYes,
+          bttsNo: blendedProbs.bttsNo
         },
         analysis: analysis
       };
@@ -142,6 +172,6 @@ export class PredictionEngine {
         console.error('[PredictionEngine] Socket emit error:', socketError);
       }
     }
-    console.log(`Multi-market predictions updated for ${scheduledMatches.length} matches.`);
+    console.log(`Blended AI predictions updated for ${scheduledMatches.length} matches.`);
   }
 }

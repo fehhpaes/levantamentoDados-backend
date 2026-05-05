@@ -4,16 +4,13 @@ import { getTeamMovingAverage } from '../utils/statsCalculator.js';
 import { FootballDataService } from '../services/footballData.js';
 import { ApiFootballService } from '../services/apiFootball.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
-import { getCache, setCache, clearAllCache } from '../services/redis.js';
-
-const footballDataService = new FootballDataService();
-const apiFootballService = new ApiFootballService();
-const predictionEngine = new PredictionEngine();
+import { getCache, setCache } from '../services/redis.js';
+import { syncQueue } from '../queues/syncQueue.js';
 
 import { TeamTest } from '../models/TeamTest.js';
 
 // Global state to track sync progress (in-memory)
-let syncState = {
+const syncState = {
   isSyncing: false,
   progress: 0,
   currentTask: '',
@@ -76,8 +73,8 @@ export const getTodayMatches = async (req: Request, res: Response) => {
 
     const now = new Date();
     
-    let startTime = new Date(now.setHours(0, 0, 0, 0));
-    let endTime = new Date(now.setHours(23, 59, 59, 999));
+    const startTime = new Date(now.setHours(0, 0, 0, 0));
+    const endTime = new Date(now.setHours(23, 59, 59, 999));
 
     if (date_type === 'yesterday') {
       startTime.setDate(startTime.getDate() - 1);
@@ -469,94 +466,19 @@ export const getBacktestStats = async (req: Request, res: Response) => {
 };
 
 export const triggerManualSync = async (req: Request, res: Response) => {
-  if (syncState.isSyncing) {
-    return res.status(409).json({ message: 'Sync already in progress' });
-  }
-
   const { competitionCode } = req.query;
-  const now = new Date();
   
-  // Expand window for manual sync
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  
-  res.json({ 
-    message: `Sync process started. Target: ${competitionCode || 'All Leagues'}`,
-    status: 'processing'
+  const today = new Date().toISOString().split('T')[0];
+
+  await syncQueue.add('manual-sync', {
+    type: competitionCode ? 'sync-competition' : 'sync-today',
+    competitionCode: competitionCode as string,
+    date: today
   });
 
-  (async () => {
-    try {
-      syncState.isSyncing = true;
-      syncState.progress = 0;
-      syncState.leaguesProcessed = [];
-
-      const competitions = [
-        { name: 'Brasileirão Série A', code: 'BSA' },
-        { name: 'Premier League', code: 'PL' },
-        { name: 'La Liga', code: 'PD' },
-        { name: 'Bundesliga', code: 'BL1' },
-        { name: 'Serie A (Italy)', code: 'SA' },
-        { name: 'Ligue 1 (France)', code: 'FL1' }
-      ];
-
-      // Filter competitions if a specific code was provided
-      const targetCompetitions = competitionCode 
-        ? competitions.filter(c => c.code === competitionCode)
-        : competitions;
-
-      if (targetCompetitions.length === 0 && competitionCode) {
-        console.error(`[Manual Sync] Invalid competition code: ${competitionCode}`);
-        syncState.isSyncing = false;
-        syncState.currentTask = 'Código de liga inválido';
-        return;
-      }
-
-      for (let i = 0; i < targetCompetitions.length; i++) {
-        const comp = targetCompetitions[i];
-        syncState.currentTask = `Sincronizando ${comp.name}...`;
-        syncState.progress = Math.round(((i) / (targetCompetitions.length)) * 100);
-        
-        console.log(`[Manual Sync] Syncing ${comp.name} (${comp.code})...`);
-        await footballDataService.syncCompetitionMatches(comp.code, yesterday, tomorrow);
-        syncState.leaguesProcessed.push(comp.name);
-        
-        if (targetCompetitions.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-      }
-
-      syncState.currentTask = 'Processando IA e Estatísticas...';
-      syncState.progress = 90;
-
-      // New step: Fetch statistics for all finished matches that don't have them
-      const matchesToUpdate = await Match.find({ 
-        status: 'FINISHED', 
-        $or: [
-          { 'stats.home_possession': { $exists: false } },
-          { 'stats.home_possession': 0 }
-        ] 
-      }).limit(50); // Limit to avoid rate limits
-      
-      console.log(`[Manual Sync] Updating statistics for ${matchesToUpdate.length} matches...`);
-      for (const m of matchesToUpdate) {
-        await apiFootballService.syncFixtureStats(m.fixture_id);
-        await new Promise(resolve => setTimeout(resolve, 200)); // Respect API-Football limits
-      }
-      
-      await predictionEngine.trainModel();
-      await predictionEngine.predictScheduledMatches();
-
-      await clearAllCache(); // Limpa todo o cache após nova sincronização
-
-      syncState.isSyncing = false;
-      syncState.progress = 100;
-      syncState.currentTask = 'Sincronização concluída!';
-      syncState.lastSync = new Date();
-    } catch (error) {
-      syncState.isSyncing = false;
-      syncState.currentTask = 'Erro na sincronização';
-      console.error('[Manual Sync] Failed:', error);
-    }
-  })();
+  res.json({ 
+    success: true,
+    message: 'Processo de sincronização adicionado à fila com sucesso.',
+    status: 'queued'
+  });
 };

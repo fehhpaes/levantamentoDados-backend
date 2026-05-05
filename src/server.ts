@@ -4,9 +4,14 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { connectDB } from './config/database.js';
 import matchRoutes from './routes/matchRoutes.js';
+import betRoutes from './routes/betRoutes.js';
 import { startUpdateWorker } from './workers/updateMatches.js';
 import { initSocket } from './services/socket.js';
 import { connectRedis } from './services/redis.js';
+
+// Import workers to initialize them
+import './queues/syncQueue.js';
+import './queues/predictionQueue.js';
 
 dotenv.config();
 
@@ -23,6 +28,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/matches', matchRoutes);
+app.use('/api/bets', betRoutes);
 
 const httpServer = createServer(app);
 initSocket(httpServer);
