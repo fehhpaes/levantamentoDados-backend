@@ -1,6 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { Match } from '../models/Match.js';
+import { getIO } from './socket.js';
 
 dotenv.config();
 
@@ -72,6 +73,16 @@ export class FootballDataService {
       
       if (result) {
         console.log(`[Football-Data] SAVED: ${matchData.homeTeam.name} vs ${matchData.awayTeam.name} (${fixtureId})`);
+        
+        // Emit socket event for real-time updates
+        try {
+          const io = getIO();
+          io.emit('matchUpdated', result);
+        } catch (socketError) {
+          // If socket is not initialized or error occurs, don't fail the save
+          console.error('[Football-Data] Socket emit error:', socketError);
+        }
+        
         return true;
       }
       return false;

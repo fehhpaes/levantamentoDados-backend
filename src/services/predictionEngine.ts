@@ -1,6 +1,7 @@
 import { RandomForestClassifier } from 'ml-random-forest';
 import { Match } from '../models/Match.js';
 import { getTeamMovingAverage } from '../utils/statsCalculator.js';
+import { getIO } from './socket.js';
 
 export class PredictionEngine {
   private classifier: RandomForestClassifier;
@@ -122,6 +123,14 @@ export class PredictionEngine {
       };
 
       await match.save();
+
+      // Emit socket event for real-time updates
+      try {
+        const io = getIO();
+        io.emit('matchUpdated', match);
+      } catch (socketError) {
+        console.error('[PredictionEngine] Socket emit error:', socketError);
+      }
     }
     console.log(`Predictions and Analysis updated for ${scheduledMatches.length} matches.`);
   }

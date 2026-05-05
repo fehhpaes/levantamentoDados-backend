@@ -1,9 +1,11 @@
 import cron from 'node-cron';
 import { FootballDataService } from '../services/footballData.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
+import { OddsApiService } from '../services/oddsApi.js';
 
 const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
+const oddsApiService = new OddsApiService();
 
 /**
  * Worker responsible for synchronizing data from the API and 
@@ -34,6 +36,7 @@ export const startUpdateWorker = () => {
         console.log(`[Worker] Running AI engine after ${comp.name} sync...`);
         await predictionEngine.trainModel();
         await predictionEngine.predictScheduledMatches();
+        await oddsApiService.syncAllOdds();
         
         console.log(`[Worker] Daily update for ${comp.name} completed.`);
       } catch (error) {
@@ -53,6 +56,7 @@ export const startUpdateWorker = () => {
       await footballDataService.syncTodayMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
+      await oddsApiService.syncAllOdds();
     } catch (error) {
       console.error('[Worker] Error during general fallback sync:', error);
     }
@@ -74,6 +78,7 @@ export const startUpdateWorker = () => {
       await footballDataService.syncTodayMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
+      await oddsApiService.syncAllOdds();
       console.log('[Worker] Startup sync finished.');
     } catch (error) {
       console.error('[Worker] Error during startup sync:', error);

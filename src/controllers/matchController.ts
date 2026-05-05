@@ -3,6 +3,7 @@ import { Match } from '../models/Match.js';
 import { getTeamMovingAverage } from '../utils/statsCalculator.js';
 import { FootballDataService } from '../services/footballData.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
+import { getCache, setCache, clearAllCache } from '../services/redis.js';
 
 const footballDataService = new FootballDataService();
 const predictionEngine = new PredictionEngine();
@@ -64,6 +65,13 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 export const getTodayMatches = async (req: Request, res: Response) => {
   try {
     const { league_id, date_type } = req.query;
+    const cacheKey = `matches:${date_type || 'today'}:${league_id || 'all'}`;
+    
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+
     const now = new Date();
     
     let startTime = new Date(now.setHours(0, 0, 0, 0));
@@ -87,6 +95,7 @@ export const getTodayMatches = async (req: Request, res: Response) => {
 
     const matches = await Match.find(query).sort({ date: 1 });
 
+    await setCache(cacheKey, JSON.stringify(matches), 300); // 5 min cache
     res.json(matches);
   } catch {
     res.status(500).json({ error: 'Failed to fetch matches' });
@@ -95,6 +104,12 @@ export const getTodayMatches = async (req: Request, res: Response) => {
 
 export const getTopPredictions = async (req: Request, res: Response) => {
   try {
+    const cacheKey = 'matches:top';
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+
     const now = new Date();
     const startTime = new Date(now.setHours(0, 0, 0, 0));
     // Look for matches from today onwards
@@ -111,6 +126,7 @@ export const getTopPredictions = async (req: Request, res: Response) => {
       return bMaxProb - aMaxProb;
     }).slice(0, 5);
 
+    await setCache(cacheKey, JSON.stringify(sortedMatches), 600); // 10 min cache
     res.json(sortedMatches);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch top predictions' });
@@ -119,6 +135,12 @@ export const getTopPredictions = async (req: Request, res: Response) => {
 
 export const getLeagues = async (req: Request, res: Response) => {
   try {
+    const cacheKey = 'leagues:list';
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+
     // Get unique leagues from the Match collection
     const leagues = await Match.aggregate([
       {
@@ -143,6 +165,8 @@ export const getLeagues = async (req: Request, res: Response) => {
       },
       { $sort: { name: 1 } }
     ]);
+
+    await setCache(cacheKey, JSON.stringify(leagues), 3600); // 1 hour cache
     res.json(leagues);
   } catch {
     res.status(500).json({ error: 'Failed to fetch leagues' });
@@ -158,7 +182,54 @@ export const getMatchById = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Match not found' });
     }
 
-    res.json(match);
+    // Get H2H history
+    const h2h = await Match.find({
+      status: 'FINISHED',
+      $or: [
+        { 'homeTeam.id': match.homeTeam.id, 'awayTeam.id': match.awayTeam.id },
+        { 'homeTeam.id': match.awayTeam.id, 'awayTeam.id': match.homeTeam.id }
+      ]
+    }).sort({ date: -1 }).limit(5);
+
+    // Get form for both teams
+    const getTeamForm = async (teamId: number) => {
+      const lastMatches = await Match.find({
+        status: 'FINISHED',
+        $or: [{ 'homeTeam.id': teamId }, { 'awayTeam.id': teamId }]
+      }).sort({ date: -1 }).limit(5);
+
+      return lastMatches.map(m => {
+        const isHome = m.homeTeam.id === teamId;
+        const goalsScored = isHome ? m.score.home : m.score.away;
+        const goalsConceded = isHome ? m.score.away : m.score.home;
+        let result: 'W' | 'D' | 'L';
+        if (goalsScored > goalsConceded) result = 'W';
+        else if (goalsScored === goalsConceded) result = 'D';
+        else result = 'L';
+        
+        return {
+          fixture_id: m.fixture_id,
+          date: m.date,
+          result,
+          score: `${m.score.home}-${m.score.away}`,
+          opponent: isHome ? m.awayTeam.name : m.homeTeam.name
+        };
+      });
+    };
+
+    const [homeForm, awayForm] = await Promise.all([
+      getTeamForm(match.homeTeam.id),
+      getTeamForm(match.awayTeam.id)
+    ]);
+
+    res.json({
+      ...match.toObject(),
+      h2h,
+      form: {
+        home: homeForm,
+        away: awayForm
+      }
+    });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -182,6 +253,87 @@ export const getMatchHistory = async (req: Request, res: Response) => {
     res.json(matches);
   } catch {
     res.status(500).json({ error: 'Failed to fetch match history' });
+  }
+};
+
+export const getBacktestStats = async (req: Request, res: Response) => {
+  try {
+    const cacheKey = 'stats:backtest';
+    const cachedData = await getCache(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+
+    // Get all finished matches that have a prediction
+    const finishedMatches = await Match.find({
+      status: 'FINISHED',
+      prediction: { $exists: true },
+      'prediction.outcome': { $ne: null }
+    }).sort({ date: -1 });
+
+    if (finishedMatches.length === 0) {
+      return res.json({
+        total: 0,
+        hits: 0,
+        accuracy: 0,
+        leagueStats: [],
+        recentMatches: []
+      });
+    }
+
+    let totalHits = 0;
+    const leagueMap: Record<number, { name: string; total: number; hits: number }> = {};
+
+    const processedMatches = finishedMatches.map(match => {
+      const homeScore = match.score.home;
+      const awayScore = match.score.away;
+      
+      let actualOutcome: number;
+      if (homeScore > awayScore) actualOutcome = 0; // Home
+      else if (homeScore === awayScore) actualOutcome = 1; // Draw
+      else actualOutcome = 2; // Away
+
+      const isHit = match.prediction!.outcome === actualOutcome;
+      if (isHit) totalHits++;
+
+      // Update league stats
+      if (!leagueMap[match.league.id]) {
+        leagueMap[match.league.id] = { name: match.league.name, total: 0, hits: 0 };
+      }
+      leagueMap[match.league.id].total++;
+      if (isHit) leagueMap[match.league.id].hits++;
+
+      return {
+        fixture_id: match.fixture_id,
+        homeTeam: match.homeTeam.name,
+        awayTeam: match.awayTeam.name,
+        score: match.score,
+        predictedOutcome: match.prediction!.outcome,
+        actualOutcome,
+        isHit,
+        date: match.date,
+        league: match.league.name
+      };
+    });
+
+    const leagueStats = Object.values(leagueMap).map(l => ({
+      ...l,
+      accuracy: Math.round((l.hits / l.total) * 100)
+    })).sort((a, b) => b.total - a.total);
+
+    const result = {
+      total: finishedMatches.length,
+      hits: totalHits,
+      accuracy: Math.round((totalHits / finishedMatches.length) * 100),
+      leagueStats,
+      recentMatches: processedMatches.slice(0, 10) // Top 10 recent for display
+    };
+
+    await setCache(cacheKey, JSON.stringify(result), 1800); // 30 min cache
+    res.json(result);
+  } catch (error) {
+    console.error('[Backtest] Error:', error);
+    res.status(500).json({ error: 'Failed to calculate backtest statistics' });
   }
 };
 
@@ -248,6 +400,8 @@ export const triggerManualSync = async (req: Request, res: Response) => {
       
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
+
+      await clearAllCache(); // Limpa todo o cache após nova sincronização
 
       syncState.isSyncing = false;
       syncState.progress = 100;

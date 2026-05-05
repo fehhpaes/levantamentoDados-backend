@@ -21,6 +21,16 @@ export interface IMatch extends Document {
       draw: number;
       awayWin: number;
     };
+    odds?: {
+      homeWin: number;
+      draw: number;
+      awayWin: number;
+    };
+    valueBet?: {
+      isFound: boolean;
+      target: 'HOME' | 'DRAW' | 'AWAY';
+      expectedValue: number;
+    };
     analysis?: string;
   };
 }
@@ -58,6 +68,16 @@ const MatchSchema: Schema = new Schema({
       homeWin: Number,
       draw: Number,
       awayWin: Number
+    },
+    odds: {
+      homeWin: Number,
+      draw: Number,
+      awayWin: Number
+    },
+    valueBet: {
+      isFound: { type: Boolean, default: false },
+      target: String,
+      expectedValue: Number
     },
     analysis: String
   }

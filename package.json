@@ -43,6 +43,8 @@
     "express": "^5.2.1",
     "ml-random-forest": "^2.1.0",
     "mongoose": "^9.6.1",
-    "node-cron": "^4.2.1"
+    "node-cron": "^4.2.1",
+    "redis": "^5.12.1",
+    "socket.io": "^4.8.3"
   }
 }
