@@ -32,8 +32,8 @@ export class ApiFootballService {
   /**
    * Utility to extract and clean specific statistics from the API array.
    */
-  private extractStat(statistics: ApiStatItem[], statName: string): number {
-    const stat = statistics.find((s) => s.type === statName);
+  private extractStat(statistics: ApiStatItem[], statNames: string[]): number {
+    const stat = statistics.find((s) => statNames.includes(s.type));
     
     if (!stat || stat.value === null) {
       return 0;
@@ -63,10 +63,10 @@ export class ApiFootballService {
       const awayStatsArray = teamStats[1].statistics;
 
       const extractedStats = {
-        home_possession: this.extractStat(homeStatsArray, 'Ball Possession'),
-        away_possession: this.extractStat(awayStatsArray, 'Ball Possession'),
-        home_shots_on_target: this.extractStat(homeStatsArray, 'Shots on Goal'),
-        away_shots_on_target: this.extractStat(awayStatsArray, 'Shots on Goal')
+        home_possession: this.extractStat(homeStatsArray, ['Ball Possession']),
+        away_possession: this.extractStat(awayStatsArray, ['Ball Possession']),
+        home_shots_on_target: this.extractStat(homeStatsArray, ['Shots on Goal', 'Shots on target']),
+        away_shots_on_target: this.extractStat(awayStatsArray, ['Shots on Goal', 'Shots on target'])
       };
 
       await Match.findOneAndUpdate(

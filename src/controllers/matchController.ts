@@ -2,10 +2,12 @@ import { Request, Response } from 'express';
 import { Match } from '../models/Match.js';
 import { getTeamMovingAverage } from '../utils/statsCalculator.js';
 import { FootballDataService } from '../services/footballData.js';
+import { ApiFootballService } from '../services/apiFootball.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 import { getCache, setCache, clearAllCache } from '../services/redis.js';
 
 const footballDataService = new FootballDataService();
+const apiFootballService = new ApiFootballService();
 const predictionEngine = new PredictionEngine();
 
 import { TeamTest } from '../models/TeamTest.js';
@@ -424,7 +426,22 @@ export const triggerManualSync = async (req: Request, res: Response) => {
       }
 
       syncState.currentTask = 'Processando IA e Estatísticas...';
-      syncState.progress = 95;
+      syncState.progress = 90;
+
+      // New step: Fetch statistics for all finished matches that don't have them
+      const matchesToUpdate = await Match.find({ 
+        status: 'FINISHED', 
+        $or: [
+          { 'stats.home_possession': { $exists: false } },
+          { 'stats.home_possession': 0 }
+        ] 
+      }).limit(50); // Limit to avoid rate limits
+      
+      console.log(`[Manual Sync] Updating statistics for ${matchesToUpdate.length} matches...`);
+      for (const m of matchesToUpdate) {
+        await apiFootballService.syncFixtureStats(m.fixture_id);
+        await new Promise(resolve => setTimeout(resolve, 200)); // Respect API-Football limits
+      }
       
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();

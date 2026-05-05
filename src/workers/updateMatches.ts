@@ -1,11 +1,33 @@
 import cron from 'node-cron';
+import { Match } from '../models/Match.js';
 import { FootballDataService } from '../services/footballData.js';
+import { SportmonksService } from '../services/sportmonks.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 import { OddsApiService } from '../services/oddsApi.js';
 
 const footballDataService = new FootballDataService();
+const sportmonksService = new SportmonksService();
 const predictionEngine = new PredictionEngine();
 const oddsApiService = new OddsApiService();
+
+/**
+ * Helper to sync statistics for finished matches that don't have them yet.
+ */
+async function syncStatsForFinishedMatches() {
+  const matchesToUpdate = await Match.find({ 
+    status: 'FINISHED', 
+    $or: [
+      { 'stats.home_possession': { $exists: false } },
+      { 'stats.home_possession': 0 }
+    ] 
+  }).limit(30);
+  
+  console.log(`[Worker] Syncing statistics for ${matchesToUpdate.length} matches...`);
+  for (const m of matchesToUpdate) {
+    await sportmonksService.syncFixtureStats(m.fixture_id);
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+}
 
 /**
  * Worker responsible for synchronizing data from the API and 
@@ -31,6 +53,7 @@ export const startUpdateWorker = () => {
 
       try {
         await footballDataService.syncCompetitionMatches(comp.code, today, today);
+        await syncStatsForFinishedMatches();
         
         // After syncing, run AI tasks
         console.log(`[Worker] Running AI engine after ${comp.name} sync...`);
@@ -54,6 +77,7 @@ export const startUpdateWorker = () => {
     console.log(`[Worker] Running general fallback sync for ${today}...`);
     try {
       await footballDataService.syncTodayMatches();
+      await syncStatsForFinishedMatches();
       await predictionEngine.trainModel();
       await predictionEngine.predictScheduledMatches();
       await oddsApiService.syncAllOdds();
