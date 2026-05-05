@@ -264,7 +264,6 @@ export const getBacktestStats = async (req: Request, res: Response) => {
       return res.json(JSON.parse(cachedData));
     }
 
-    // Get all finished matches that have a prediction
     const finishedMatches = await Match.find({
       status: 'FINISHED',
       prediction: { $exists: true },
@@ -274,65 +273,94 @@ export const getBacktestStats = async (req: Request, res: Response) => {
     if (finishedMatches.length === 0) {
       return res.json({
         total: 0,
-        hits: 0,
         accuracy: 0,
+        markets: { winner: 0, overUnder: 0, btts: 0 },
         leagueStats: [],
         recentMatches: []
       });
     }
 
-    let totalHits = 0;
+    let winnerHits = 0;
+    let ouHits = 0;
+    let bttsHits = 0;
+    let ouTotal = 0;
+    let bttsTotal = 0;
+
     const leagueMap: Record<number, { name: string; total: number; hits: number }> = {};
 
     const processedMatches = finishedMatches.map(match => {
       const homeScore = match.score.home;
       const awayScore = match.score.away;
+      const totalGoals = homeScore + awayScore;
       
+      // 1X2 Winner
       let actualOutcome: number;
-      if (homeScore > awayScore) actualOutcome = 0; // Home
-      else if (homeScore === awayScore) actualOutcome = 1; // Draw
-      else actualOutcome = 2; // Away
+      if (homeScore > awayScore) actualOutcome = 0;
+      else if (homeScore === awayScore) actualOutcome = 1;
+      else actualOutcome = 2;
 
-      const isHit = match.prediction!.outcome === actualOutcome;
-      if (isHit) totalHits++;
+      const isWinnerHit = match.prediction!.outcome === actualOutcome;
+      if (isWinnerHit) winnerHits++;
 
-      // Update league stats
+      // Over/Under 2.5
+      let isOUHit = false;
+      if (match.prediction!.probabilities.over25 !== undefined) {
+        ouTotal++;
+        const predictedOver = match.prediction!.probabilities.over25 > 0.5;
+        const actualOver = totalGoals > 2.5;
+        isOUHit = predictedOver === actualOver;
+        if (isOUHit) ouHits++;
+      }
+
+      // BTTS
+      let isBTTSHit = false;
+      if (match.prediction!.probabilities.bttsYes !== undefined) {
+        bttsTotal++;
+        const predictedBTTS = match.prediction!.probabilities.bttsYes > 0.5;
+        const actualBTTS = homeScore > 0 && awayScore > 0;
+        isBTTSHit = predictedBTTS === actualBTTS;
+        if (isBTTSHit) bttsHits++;
+      }
+
+      // Update league stats (using Winner as baseline)
       if (!leagueMap[match.league.id]) {
         leagueMap[match.league.id] = { name: match.league.name, total: 0, hits: 0 };
       }
       leagueMap[match.league.id].total++;
-      if (isHit) leagueMap[match.league.id].hits++;
+      if (isWinnerHit) leagueMap[match.league.id].hits++;
 
       return {
         fixture_id: match.fixture_id,
         homeTeam: match.homeTeam.name,
         awayTeam: match.awayTeam.name,
         score: match.score,
-        predictedOutcome: match.prediction!.outcome,
-        actualOutcome,
-        isHit,
+        prediction: match.prediction,
+        isWinnerHit,
+        isOUHit,
+        isBTTSHit,
         date: match.date,
         league: match.league.name
       };
     });
 
-    const leagueStats = Object.values(leagueMap).map(l => ({
-      ...l,
-      accuracy: Math.round((l.hits / l.total) * 100)
-    })).sort((a, b) => b.total - a.total);
-
     const result = {
       total: finishedMatches.length,
-      hits: totalHits,
-      accuracy: Math.round((totalHits / finishedMatches.length) * 100),
-      leagueStats,
-      recentMatches: processedMatches.slice(0, 10) // Top 10 recent for display
+      accuracy: Math.round((winnerHits / finishedMatches.length) * 100),
+      markets: {
+        winner: Math.round((winnerHits / finishedMatches.length) * 100),
+        overUnder: ouTotal > 0 ? Math.round((ouHits / ouTotal) * 100) : 0,
+        btts: bttsTotal > 0 ? Math.round((bttsHits / bttsTotal) * 100) : 0
+      },
+      leagueStats: Object.values(leagueMap).map(l => ({
+        ...l,
+        accuracy: Math.round((l.hits / l.total) * 100)
+      })).sort((a, b) => b.total - a.total),
+      recentMatches: processedMatches.slice(0, 10)
     };
 
-    await setCache(cacheKey, JSON.stringify(result), 1800); // 30 min cache
+    await setCache(cacheKey, JSON.stringify(result), 1800);
     res.json(result);
   } catch (error) {
-    console.error('[Backtest] Error:', error);
     res.status(500).json({ error: 'Failed to calculate backtest statistics' });
   }
 };

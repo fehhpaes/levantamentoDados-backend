@@ -20,11 +20,19 @@ export interface IMatch extends Document {
       homeWin: number;
       draw: number;
       awayWin: number;
+      over25?: number;
+      under25?: number;
+      bttsYes?: number;
+      bttsNo?: number;
     };
     odds?: {
       homeWin: number;
       draw: number;
       awayWin: number;
+      over25?: number;
+      under25?: number;
+      bttsYes?: number;
+      bttsNo?: number;
     };
     valueBet?: {
       isFound: boolean;
@@ -67,12 +75,20 @@ const MatchSchema: Schema = new Schema({
     probabilities: {
       homeWin: Number,
       draw: Number,
-      awayWin: Number
+      awayWin: Number,
+      over25: Number,
+      under25: Number,
+      bttsYes: Number,
+      bttsNo: Number
     },
     odds: {
       homeWin: Number,
       draw: Number,
-      awayWin: Number
+      awayWin: Number,
+      over25: Number,
+      under25: Number,
+      bttsYes: Number,
+      bttsNo: Number
     },
     valueBet: {
       isFound: { type: Boolean, default: false },
