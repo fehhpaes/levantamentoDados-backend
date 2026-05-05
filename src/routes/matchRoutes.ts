@@ -5,6 +5,7 @@ const router = Router();
 
 router.get('/today', getTodayMatches);
 router.get('/top', getTopPredictions);
+router.get('/report', getBetsReport);
 router.get('/backtest', getBacktestStats);
 router.get('/leagues', getLeagues);
 router.get('/history', getMatchHistory);

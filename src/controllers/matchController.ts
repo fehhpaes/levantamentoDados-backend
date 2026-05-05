@@ -114,7 +114,6 @@ export const getTopPredictions = async (req: Request, res: Response) => {
 
     const now = new Date();
     const startTime = new Date(now.setHours(0, 0, 0, 0));
-    // Look for matches from today onwards
     
     const matches = await Match.find({
       status: 'SCHEDULED',
@@ -123,8 +122,8 @@ export const getTopPredictions = async (req: Request, res: Response) => {
     });
 
     const sortedMatches = matches.sort((a, b) => {
-      const aMaxProb = Math.max(a.prediction!.probabilities.homeWin, a.prediction!.probabilities.awayWin);
-      const bMaxProb = Math.max(b.prediction!.probabilities.homeWin, b.prediction!.probabilities.awayWin);
+      const aMaxProb = Math.max(a.prediction!.probabilities.homeWin, a.prediction!.probabilities.awayWin, a.prediction!.probabilities.draw);
+      const bMaxProb = Math.max(b.prediction!.probabilities.homeWin, b.prediction!.probabilities.awayWin, b.prediction!.probabilities.draw);
       return bMaxProb - aMaxProb;
     }).slice(0, 5);
 
@@ -132,6 +131,106 @@ export const getTopPredictions = async (req: Request, res: Response) => {
     res.json(sortedMatches);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch top predictions' });
+  }
+};
+
+export const getBetsReport = async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const startTime = new Date(now.setHours(0, 0, 0, 0));
+    
+    const matches = await Match.find({
+      status: 'SCHEDULED',
+      date: { $gte: startTime },
+      'prediction.probabilities': { $exists: true }
+    });
+
+    const top5 = matches.sort((a, b) => {
+      const aMaxProb = Math.max(a.prediction!.probabilities.homeWin, a.prediction!.probabilities.awayWin, a.prediction!.probabilities.draw);
+      const bMaxProb = Math.max(b.prediction!.probabilities.homeWin, b.prediction!.probabilities.awayWin, b.prediction!.probabilities.draw);
+      return bMaxProb - aMaxProb;
+    }).slice(0, 5);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Relatório Top 5 Bets - ${now.toLocaleDateString('pt-BR')}</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; margin: 40px; }
+          .header { text-align: center; border-bottom: 2px solid #22c55e; padding-bottom: 20px; margin-bottom: 30px; }
+          .header h1 { margin: 0; color: #166534; text-transform: uppercase; letter-spacing: 2px; }
+          .header p { margin: 5px 0 0; color: #666; font-weight: bold; }
+          .match-card { border: 1px solid #ddd; border-radius: 12px; padding: 20px; margin-bottom: 20px; page-break-inside: avoid; background: #fafafa; }
+          .match-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 10px; }
+          .league { font-size: 12px; font-weight: 900; color: #22c55e; text-transform: uppercase; }
+          .date { font-size: 12px; color: #888; }
+          .teams { display: flex; justify-content: space-around; align-items: center; font-size: 18px; font-weight: bold; margin: 20px 0; }
+          .vs { color: #999; font-style: italic; font-size: 14px; }
+          .prediction-box { background: #fff; border: 2px solid #22c55e; border-radius: 8px; padding: 15px; text-align: center; }
+          .prediction-title { font-size: 10px; font-weight: 900; color: #666; text-transform: uppercase; margin-bottom: 5px; }
+          .prediction-value { font-size: 24px; font-weight: 900; color: #166534; }
+          .prob-grid { display: grid; grid-cols: 2; gap: 10px; margin-top: 15px; }
+          .analysis { margin-top: 15px; font-size: 13px; color: #555; font-style: italic; line-height: 1.5; padding: 10px; background: #f0fdf4; border-left: 4px solid #22c55e; }
+          .footer { text-align: center; margin-top: 50px; font-size: 10px; color: #aaa; text-transform: uppercase; }
+          @media print {
+            .no-print { display: none; }
+            body { margin: 0; }
+            .match-card { border: 1px solid #000; }
+          }
+          .print-btn { background: #22c55e; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="text-align: right;">
+          <button class="print-btn" onclick="window.print()">IMPRIMIR RELATÓRIO</button>
+        </div>
+        <div class="header">
+          <h1>Levantamento de Dados - Top 5 Bets</h1>
+          <p>Relatório de Inteligência Artificial para ${now.toLocaleDateString('pt-BR')}</p>
+        </div>
+
+        ${top5.map((m, index) => {
+          const probs = m.prediction!.probabilities;
+          const bestTarget = probs.homeWin > probs.awayWin && probs.homeWin > probs.draw ? m.homeTeam.name : 
+                           (probs.awayWin > probs.homeWin && probs.awayWin > probs.draw ? m.awayTeam.name : 'Empate');
+          const bestProb = Math.max(probs.homeWin, probs.awayWin, probs.draw);
+
+          return `
+            <div class="match-card">
+              <div class="match-header">
+                <span class="league">#${index + 1} - ${m.league.name}</span>
+                <span class="date">${new Date(m.date).toLocaleString('pt-BR')}</span>
+              </div>
+              <div class="teams">
+                <div style="flex: 1; text-align: center;">${m.homeTeam.name}</div>
+                <div class="vs">VS</div>
+                <div style="flex: 1; text-align: center;">${m.awayTeam.name}</div>
+              </div>
+              <div class="prediction-box">
+                <div class="prediction-title">Palpite Recomendado</div>
+                <div class="prediction-value">${bestTarget} (${(bestProb * 100).toFixed(0)}%)</div>
+              </div>
+              ${m.prediction?.analysis ? `<div class="analysis">" ${m.prediction.analysis} "</div>` : ''}
+              <div style="display: flex; justify-content: space-between; margin-top: 15px; font-size: 11px; font-weight: bold; color: #777;">
+                <span>OVER 2.5: ${(probs.over25! * 100).toFixed(0)}%</span>
+                <span>AMBAS MARCAM: ${(probs.bttsYes! * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+
+        <div class="footer">
+          Gerado automaticamente pelo Sistema de Levantamento de Dados - ${now.toLocaleString('pt-BR')}
+        </div>
+      </body>
+      </html>
+    `;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate report' });
   }
 };
 
