@@ -31,8 +31,8 @@ async function checkMatch() {
     }
 
     const arsenalMatch = matches.find((m: any) => 
-      m.homeTeam.name.toLowerCase().includes('arsenal') || m.awayTeam.name.toLowerCase().includes('arsenal') ||
-      m.homeTeam.name.toLowerCase().includes('atleti') || m.awayTeam.name.toLowerCase().includes('atleti')
+      m.homeTeam.name.toLowerCase().includes('rosario') || m.awayTeam.name.toLowerCase().includes('rosario') ||
+      m.homeTeam.name.toLowerCase().includes('libertad') || m.awayTeam.name.toLowerCase().includes('libertad')
     );
 
     if (arsenalMatch) {
