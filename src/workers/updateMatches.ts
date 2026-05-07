@@ -3,14 +3,11 @@ import axios from 'axios';
 import { syncQueue } from '../queues/syncQueue.js';
 
 /**
- * Worker responsible for scheduling synchronization tasks.
- * Instead of running logic directly, it dispatches jobs to BullMQ.
+ * Keeps the server alive by pinging its own /ping endpoint.
+ * This is crucial for free-tier hosting like Render.
  */
-export const startUpdateWorker = () => {
-  console.log('--- Match Update Scheduler Started (BullMQ + Cron) ---');
-
-  // Self-ping to keep the server alive (Render/Free Tiers)
-  // Runs every 14 minutes
+export const startKeepAlive = () => {
+  console.log('--- Keep-Alive Monitor Started ---');
   cron.schedule('*/14 * * * *', async () => {
     try {
       const port = process.env.PORT || 3001;
@@ -21,6 +18,14 @@ export const startUpdateWorker = () => {
       console.error('[Keep-Alive] Ping failed:', error.message);
     }
   });
+};
+
+/**
+ * Worker responsible for scheduling synchronization tasks.
+ * Instead of running logic directly, it dispatches jobs to BullMQ.
+ */
+export const startUpdateWorker = () => {
+  console.log('--- Match Update Scheduler Started (BullMQ + Cron) ---');
 
   const competitions = [
     { name: 'Brasileirão Série A', code: 'BSA', cron: '0 3 * * *' }, // 03:00 AM

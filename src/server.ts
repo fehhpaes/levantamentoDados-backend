@@ -5,7 +5,7 @@ import { createServer } from 'http';
 import { connectDB } from './config/database.js';
 import matchRoutes from './routes/matchRoutes.js';
 import betRoutes from './routes/betRoutes.js';
-import { startUpdateWorker } from './workers/updateMatches.js';
+import { startUpdateWorker, startKeepAlive } from './workers/updateMatches.js';
 import { initSocket } from './services/socket.js';
 import { connectRedis } from './services/redis.js';
 
@@ -37,11 +37,15 @@ initSocket(httpServer);
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   
-  // Initialize services in background
+  // 1. Start Keep-Alive (Independent of DB/Redis)
+  startKeepAlive();
+  
+  // 2. Initialize services in background
   connectDB();
   connectRedis().then(() => {
+    // 3. Start Update Worker ONLY if Redis is connected (required for BullMQ)
     startUpdateWorker();
   }).catch(err => {
-    console.error('Failed to connect to Redis, worker not started:', err.message);
+    console.error('Failed to connect to Redis, update worker not started:', err.message);
   });
 });
