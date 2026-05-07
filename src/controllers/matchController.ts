@@ -64,12 +64,15 @@ export const getSyncStatus = async (req: Request, res: Response) => {
 export const getTodayMatches = async (req: Request, res: Response) => {
   try {
     const { league_id, date_type } = req.query;
-    const cacheKey = `matches:${date_type || 'today'}:${league_id || 'all'}`;
     
+    // Disable cache for troubleshooting
+    /*
+    const cacheKey = `matches:${date_type || 'today'}:${league_id || 'all'}`;
     const cachedData = await getCache(cacheKey);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
+    */
 
     const now = new Date();
     
@@ -103,11 +106,13 @@ export const getTodayMatches = async (req: Request, res: Response) => {
 
 export const getTopPredictions = async (req: Request, res: Response) => {
   try {
+    /*
     const cacheKey = 'matches:top';
     const cachedData = await getCache(cacheKey);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
+    */
 
     const now = new Date();
     const startTime = new Date(now.setHours(0, 0, 0, 0));
@@ -235,11 +240,13 @@ export const getBetsReport = async (req: Request, res: Response) => {
 
 export const getLeagues = async (req: Request, res: Response) => {
   try {
+    /*
     const cacheKey = 'leagues:list';
     const cachedData = await getCache(cacheKey);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
+    */
 
     // Get unique leagues from the Match collection
     const leagues = await Match.aggregate([
