@@ -45,18 +45,24 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
 }, { connection });
 
 async function syncStatsForFinishedMatches() {
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
   const matchesToUpdate = await Match.find({ 
-    status: 'FINISHED', 
+    status: 'FINISHED',
+    date: { $gte: threeDaysAgo },
     $or: [
+      { stats: { $exists: false } },
       { 'stats.home_possession': { $exists: false } },
       { 'stats.home_possession': 0 }
     ] 
-  }).limit(30);
+  }).limit(50);
   
   console.log(`[SyncWorker] Syncing statistics and resolving bets for ${matchesToUpdate.length} matches...`);
   for (const m of matchesToUpdate) {
     await sportmonksService.syncStatsByMatch(m);
     await resolveBetsForMatch(m);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Increase delay slightly to be safer with rate limits
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
