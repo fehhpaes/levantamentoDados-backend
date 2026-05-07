@@ -8,29 +8,38 @@ dotenv.config();
 
 async function manualCompute() {
   const directUrl = "mongodb://admin:admin@ac-wkmycvl-shard-00-00.8gassal.mongodb.net:27017/sports_data?authSource=admin&ssl=true";
-  const COMP_CODE = 'CLI'; // Copa Libertadores
+  const competitions = ['BSA', 'PL', 'PD', 'BL1', 'SA', 'FL1', 'CL', 'CLI'];
   
   try {
     console.log('Connecting to MongoDB (Direct Shard)...');
     await mongoose.connect(directUrl);
     console.log('Connected!');
     
-    console.log(`--- Manual Computation for ${COMP_CODE} ---`);
-  
-  const footballDataService = new FootballDataService();
-  const predictionEngine = new PredictionEngine();
+    const footballDataService = new FootballDataService();
+    const predictionEngine = new PredictionEngine();
+    const today = new Date().toISOString().split('T')[0];
 
-  const today = new Date().toISOString().split('T')[0];
-  console.log(`Step 1: Syncing ${COMP_CODE} for ${today}...`);
-  await footballDataService.syncCompetitionMatches(COMP_CODE, today, today);
+    console.log('--- Starting Global Manual Sync ---');
 
-  console.log('Step 2: Training Models (if possible)...');
-  await predictionEngine.trainModel();
+    // 1. Sync all competitions
+    for (const code of competitions) {
+      console.log(`Step 1: Syncing ${code} for ${today}...`);
+      await footballDataService.syncCompetitionMatches(code, today, today);
+    }
 
-  console.log('Step 3: Generating Predictions for Scheduled matches...');
-  await predictionEngine.predictScheduledMatches();
+    // 2. General sync for other leagues
+    console.log('Step 2: Running general today sync...');
+    await footballDataService.syncTodayMatches();
 
-  console.log('--- Manual Computation Finished ---');
+    // 3. Train Models
+    console.log('Step 3: Training AI Models...');
+    await predictionEngine.trainModel();
+
+    // 4. Generate Predictions
+    console.log('Step 4: Generating Predictions for all scheduled matches...');
+    await predictionEngine.predictScheduledMatches();
+
+    console.log('--- Global Manual Sync Finished Successfully ---');
   
   } catch (error: any) {
     console.error('Manual Compute failed:', error.message);
