@@ -16,7 +16,7 @@ export const connectDB = async () => {
     console.log('Attempting to connect to MongoDB Atlas...');
     await mongoose.connect(MONGODB_URL, {
       dbName: MONGODB_DATABASE,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds
+      serverSelectionTimeoutMS: 10000, // Increased timeout
     });
     console.log(`✅ MongoDB connected successfully to: ${MONGODB_DATABASE}`);
   } catch (error: any) {
@@ -24,6 +24,7 @@ export const connectDB = async () => {
     if (error.message.includes('ECONNREFUSED')) {
       console.error('HINT: This is likely a DNS issue. Check if your network blocks SRV records or try a non-SRV connection string.');
     }
-    process.exit(1);
+    // We do NOT exit here to allow the server to start and potentially serve a ping route
+    // to keep the service alive or allow manual intervention.
   }
 };

@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import axios from 'axios';
 import { syncQueue } from '../queues/syncQueue.js';
 
 /**
@@ -7,6 +8,19 @@ import { syncQueue } from '../queues/syncQueue.js';
  */
 export const startUpdateWorker = () => {
   console.log('--- Match Update Scheduler Started (BullMQ + Cron) ---');
+
+  // Self-ping to keep the server alive (Render/Free Tiers)
+  // Runs every 14 minutes
+  cron.schedule('*/14 * * * *', async () => {
+    try {
+      const port = process.env.PORT || 3001;
+      const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`;
+      console.log(`[Keep-Alive] Pinging server at ${url}/api/matches/ping...`);
+      await axios.get(`${url}/api/matches/ping`);
+    } catch (error: any) {
+      console.error('[Keep-Alive] Ping failed:', error.message);
+    }
+  });
 
   const competitions = [
     { name: 'Brasileirão Série A', code: 'BSA', cron: '0 3 * * *' }, // 03:00 AM

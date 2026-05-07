@@ -33,10 +33,15 @@ app.use('/api/bets', betRoutes);
 const httpServer = createServer(app);
 initSocket(httpServer);
 
-// Database connection and Server start
-Promise.all([connectDB(), connectRedis()]).then(() => {
-  httpServer.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+// Start Server immediately to allow /ping and keep-alive
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
+  
+  // Initialize services in background
+  connectDB();
+  connectRedis().then(() => {
     startUpdateWorker();
+  }).catch(err => {
+    console.error('Failed to connect to Redis, worker not started:', err.message);
   });
 });
