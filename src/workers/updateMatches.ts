@@ -79,4 +79,20 @@ export const startUpdateWorker = () => {
   };
 
   startupSync();
+
+  /**
+   * Self-Healing Job: Check for stuck matches from yesterday
+   * Runs every hour to ensure data integrity
+   */
+  cron.schedule('0 * * * *', async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split('T')[0];
+    
+    console.log(`[Self-Healing] Checking for stuck matches from yesterday (${dateStr})...`);
+    await syncQueue.add('self-healing-yesterday', { 
+      type: 'sync-today', // Using sync-today logic but for yesterday's date if we modify the worker
+      date: dateStr 
+    });
+  });
 };

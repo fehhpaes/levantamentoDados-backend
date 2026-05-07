@@ -28,7 +28,12 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
     if (type === 'sync-competition') {
       await footballDataService.syncCompetitionMatches(competitionCode, date, date);
     } else if (type === 'sync-today') {
-      await footballDataService.syncTodayMatches();
+      if (date) {
+        // If a specific date is provided (like yesterday for self-healing)
+        await footballDataService.fetchAndSyncMatches(date, date);
+      } else {
+        await footballDataService.syncTodayMatches();
+      }
     }
 
     // After syncing matches, sync stats for finished ones
