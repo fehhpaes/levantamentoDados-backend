@@ -91,20 +91,31 @@ async function runFullBacktestAnalysis() {
 }
 
 async function syncStatsForFinishedMatches() {
+  const now = new Date();
   const threeDaysAgo = new Date();
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
+  // 1. Find matches that are finished but missing stats
+  // 2. ALSO find matches that should have finished by now (past start time + 3 hours) but are still marked as SCHEDULED
   const matchesToUpdate = await Match.find({ 
-    status: 'FINISHED',
-    date: { $gte: threeDaysAgo },
     $or: [
-      { stats: { $exists: false } },
-      { 'stats.home_possession': { $exists: false } },
-      { 'stats.home_possession': 0 }
-    ] 
+      { 
+        status: 'FINISHED',
+        date: { $gte: threeDaysAgo },
+        $or: [
+          { stats: { $exists: false } },
+          { 'stats.home_possession': { $exists: false } },
+          { 'stats.home_possession': 0 }
+        ]
+      },
+      {
+        status: 'SCHEDULED',
+        date: { $gte: threeDaysAgo, $lt: new Date(now.getTime() - (3 * 60 * 60 * 1000)) }
+      }
+    ]
   }).limit(50);
   
-  console.log(`[SyncWorker] Syncing statistics and resolving bets for ${matchesToUpdate.length} matches...`);
+  console.log(`[SyncWorker] Syncing results/stats for ${matchesToUpdate.length} matches...`);
   for (const m of matchesToUpdate) {
     await sportmonksService.syncStatsByMatch(m);
     await resolveBetsForMatch(m);
