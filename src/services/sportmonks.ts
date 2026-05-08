@@ -61,6 +61,13 @@ export class SportmonksService {
         return item ? Number(item.value) : 0;
       };
 
+      const extractedStats = {
+        home_possession: extractValue(homeStats, 45),
+        away_possession: extractValue(awayStats, 45),
+        home_shots_on_target: extractValue(homeStats, 51),
+        away_shots_on_target: extractValue(awayStats, 51)
+      };
+
       const isFinished = foundFixture.state?.short_name === 'FT';
       const homeScore = foundFixture.scores?.find((s: any) => s.participant_id === foundFixture.participants.find((p: any) => p.meta.location === 'home').id && s.description === 'CURRENT')?.score?.goals ?? 0;
       const awayScore = foundFixture.scores?.find((s: any) => s.participant_id === foundFixture.participants.find((p: any) => p.meta.location === 'away').id && s.description === 'CURRENT')?.score?.goals ?? 0;
