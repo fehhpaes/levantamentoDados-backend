@@ -18,15 +18,20 @@ router.get('/clear', clearDatabase);
 router.get('/ping', async (req, res) => { 
   try {
     // Basic DB check to keep the connection and instance alive
-    const count = await Match.countDocuments().limit(1);
+    // Use a timeout to avoid hanging if DB is not responding
+    const dbPromise = Match.countDocuments().limit(1);
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000));
+    
+    await Promise.race([dbPromise, timeoutPromise]);
+    
     res.json({ 
       status: 'online', 
       db: 'connected', 
-      count,
       time: new Date() 
     }); 
   } catch (e) {
-    res.json({ status: 'online', db: 'error', time: new Date() });
+    // Still return 200/online even if DB is failing, to keep Render instance alive
+    res.json({ status: 'online', db: 'connecting/error', time: new Date() });
   }
 });
 router.get('/debug/clear-cache', async (req, res) => {

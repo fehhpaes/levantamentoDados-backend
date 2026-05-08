@@ -6,7 +6,11 @@ dotenv.config();
 export const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const client = createClient({
-  url: redisUrl
+  url: redisUrl,
+  socket: {
+    connectTimeout: 20000,
+    reconnectStrategy: (retries) => Math.min(retries * 100, 3000)
+  }
 });
 
 client.on('error', (err) => console.error('[Redis] Client Error:', err));
