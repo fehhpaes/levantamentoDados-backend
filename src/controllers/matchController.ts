@@ -470,6 +470,9 @@ export const getBacktestStats = async (req: Request, res: Response) => {
         isWinnerHit,
         isOUHit,
         isBTTSHit,
+        isHit: isWinnerHit, // Frontend expects isHit
+        predictedOutcome: match.prediction!.outcome, // Frontend expects predictedOutcome
+        actualOutcome: actualOutcome, // Frontend expects actualOutcome
         date: match.date,
         league: match.league.name
       };
@@ -477,6 +480,7 @@ export const getBacktestStats = async (req: Request, res: Response) => {
 
     const result = {
       total: finishedMatches.length,
+      hits: winnerHits, // Frontend expects hits
       accuracy: Math.round((winnerHits / finishedMatches.length) * 100),
       markets: {
         winner: Math.round((winnerHits / finishedMatches.length) * 100),
