@@ -79,21 +79,28 @@ export const getTodayMatches = async (req: Request, res: Response) => {
     */
 
     const now = new Date();
+    const BRAZIL_OFFSET = -3;
     
-    // Use a slightly wider range (30 hours) to account for timezones
-    const startTime = new Date(now);
-    startTime.setHours(startTime.getHours() - 15, 0, 0, 0);
+    // Get current time in Brazil to determine the "local today"
+    const localTime = new Date(now.getTime() + (BRAZIL_OFFSET * 60 * 60 * 1000));
     
-    const endTime = new Date(now);
-    endTime.setHours(endTime.getHours() + 15, 59, 59, 999);
+    // Create a UTC date representing 00:00 of the target day in Brazil
+    const targetDate = new Date(Date.UTC(
+      localTime.getUTCFullYear(),
+      localTime.getUTCMonth(),
+      localTime.getUTCDate()
+    ));
 
     if (date_type === 'yesterday') {
-      startTime.setDate(startTime.getDate() - 1);
-      endTime.setDate(endTime.getDate() - 1);
+      targetDate.setUTCDate(targetDate.getUTCDate() - 1);
     } else if (date_type === 'tomorrow') {
-      startTime.setDate(startTime.getDate() + 1);
-      endTime.setDate(endTime.getDate() + 1);
+      targetDate.setUTCDate(targetDate.getUTCDate() + 1);
     }
+
+    // Brazil 00:00 is UTC 03:00
+    const startTime = new Date(targetDate.getTime() + (3 * 60 * 60 * 1000));
+    // End of the same day (23:59:59 Brazil)
+    const endTime = new Date(startTime.getTime() + (24 * 60 * 60 * 1000) - 1);
 
     const query: any = {
       date: { $gte: startTime, $lt: endTime }
@@ -103,7 +110,7 @@ export const getTodayMatches = async (req: Request, res: Response) => {
       query['league.id'] = Number(league_id);
     }
 
-    console.log(`[Matches] Fetching for ${date_type || 'today'}. Range: ${startTime.toISOString()} to ${endTime.toISOString()}`);
+    console.log(`[Matches] Fetching for ${date_type || 'today'} (Brazil Time). Range: ${startTime.toISOString()} to ${endTime.toISOString()}`);
     const matches = await Match.find(query).sort({ date: 1 });
     console.log(`[Matches] Found ${matches.length} matches.`);
     
