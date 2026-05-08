@@ -16,7 +16,10 @@ export const connectDB = async () => {
     console.log('Attempting to connect to MongoDB Atlas...');
     await mongoose.connect(MONGODB_URL, {
       dbName: MONGODB_DATABASE,
-      serverSelectionTimeoutMS: 10000, // Increased timeout
+      serverSelectionTimeoutMS: 30000, // Wait up to 30s for wake up
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      heartbeatFrequencyMS: 10000, // More frequent heartbeat to keep connection alive
     });
     console.log(`✅ MongoDB connected successfully to: ${MONGODB_DATABASE}`);
   } catch (error: any) {

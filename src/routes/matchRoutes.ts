@@ -14,7 +14,20 @@ router.get('/sync', triggerManualSync);
 router.get('/sync-status', getSyncStatus); 
 router.get('/db-test', testDatabaseWrite); 
 router.get('/clear', clearDatabase); 
-router.get('/ping', (req, res) => { res.json({ status: 'online', time: new Date() }); });
+router.get('/ping', async (req, res) => { 
+  try {
+    // Basic DB check to keep the connection and instance alive
+    const count = await Match.countDocuments().limit(1);
+    res.json({ 
+      status: 'online', 
+      db: 'connected', 
+      count,
+      time: new Date() 
+    }); 
+  } catch (e) {
+    res.json({ status: 'online', db: 'error', time: new Date() });
+  }
+});
 router.get('/debug/clear-cache', async (req, res) => {
   const { clearAllCache } = await import('../services/redis.js');
   await clearAllCache();
