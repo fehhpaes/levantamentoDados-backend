@@ -45,10 +45,12 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
       await runFullBacktestAnalysis();
     }
 
+    // ALWAYS sync stats and resolve bets after any match sync process
+    await syncStatsForFinishedMatches();
+
     updateSyncStatus({ progress: 40, currentTask: 'Sincronizando estatísticas...' });
 
-    // After syncing matches, sync stats for finished ones
-    await syncStatsForFinishedMatches();
+    // Remove the redundant call below if it was there
 
     updateSyncStatus({ progress: 70, currentTask: 'Gerando previsões IA...' });
 

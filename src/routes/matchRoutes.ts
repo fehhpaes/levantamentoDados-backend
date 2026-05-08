@@ -39,6 +39,14 @@ router.get('/debug/force-backtest', async (req, res) => {
   await syncQueue.add('force-backtest-all', { type: 'force-backtest' });
   res.json({ success: true, message: 'Full backtest process added to queue' });
 });
+router.get('/debug/force-sync-past', async (req, res) => {
+  const { syncQueue } = await import('../queues/syncQueue.js');
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dateStr = yesterday.toISOString().split('T')[0];
+  await syncQueue.add('force-sync-yesterday', { type: 'sync-today', date: dateStr });
+  res.json({ success: true, message: `Sync for ${dateStr} added to queue` });
+});
 router.get('/:fixture_id', getMatchById);
 
 export default router;
