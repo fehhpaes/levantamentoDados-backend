@@ -15,24 +15,11 @@ router.get('/sync', triggerManualSync);
 router.get('/sync-status', getSyncStatus); 
 router.get('/db-test', testDatabaseWrite); 
 router.get('/clear', clearDatabase); 
-router.get('/ping', async (req, res) => { 
-  try {
-    // Basic DB check to keep the connection and instance alive
-    // Use a timeout to avoid hanging if DB is not responding
-    const dbPromise = Match.countDocuments().limit(1);
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000));
-    
-    await Promise.race([dbPromise, timeoutPromise]);
-    
-    res.json({ 
-      status: 'online', 
-      db: 'connected', 
-      time: new Date() 
-    }); 
-  } catch (e) {
-    // Still return 200/online even if DB is failing, to keep Render instance alive
-    res.json({ status: 'online', db: 'connecting/error', time: new Date() });
-  }
+router.get('/ping', (req, res) => { 
+  res.json({ 
+    status: 'online', 
+    time: new Date() 
+  }); 
 });
 router.get('/debug/clear-cache', async (req, res) => {
   const { clearAllCache } = await import('../services/redis.js');
