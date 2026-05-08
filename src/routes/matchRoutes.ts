@@ -20,6 +20,11 @@ router.get('/debug/clear-cache', async (req, res) => {
   await clearAllCache();
   res.json({ success: true, message: 'All cache cleared for debugging' });
 });
+router.get('/debug/force-backtest', async (req, res) => {
+  const { syncQueue } = await import('../queues/syncQueue.js');
+  await syncQueue.add('force-backtest-all', { type: 'force-backtest' });
+  res.json({ success: true, message: 'Full backtest process added to queue' });
+});
 router.get('/:fixture_id', getMatchById);
 
 export default router;

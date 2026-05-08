@@ -41,6 +41,8 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
       } else {
         await footballDataService.syncTodayMatches();
       }
+    } else if (type === 'force-backtest') {
+      await runFullBacktestAnalysis();
     }
 
     updateSyncStatus({ progress: 40, currentTask: 'Sincronizando estatísticas...' });
@@ -60,6 +62,31 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
     throw error;
   }
 }, { connection });
+
+async function runFullBacktestAnalysis() {
+  const { PredictionEngine } = await import('../services/predictionEngine.js');
+  const engine = new PredictionEngine();
+  
+  updateSyncStatus({ progress: 15, currentTask: 'Treinando modelos para Backtest...' });
+  await engine.trainModel();
+
+  const finishedMatches = await Match.find({ status: 'FINISHED' });
+  console.log(`[Backtest] Re-analyzing ${finishedMatches.length} matches...`);
+
+  let count = 0;
+  for (const match of finishedMatches) {
+    const prediction = await engine.generatePrediction(match);
+    if (prediction) {
+      match.prediction = prediction;
+      await match.save();
+    }
+    count++;
+    if (count % 10 === 0) {
+      const progress = Math.min(15 + Math.floor((count / finishedMatches.length) * 20), 35);
+      updateSyncStatus({ progress, currentTask: `Analisando: ${count}/${finishedMatches.length}` });
+    }
+  }
+}
 
 async function syncStatsForFinishedMatches() {
   const threeDaysAgo = new Date();

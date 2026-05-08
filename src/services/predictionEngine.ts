@@ -123,6 +123,28 @@ export class PredictionEngine {
     });
 
     for (const match of scheduledMatches) {
+      const prediction = await this.generatePrediction(match);
+      if (prediction) {
+        match.prediction = prediction;
+        await match.save();
+
+        try {
+          const io = getIO();
+          io.emit('matchUpdated', match);
+        } catch (socketError) {
+          console.error('[PredictionEngine] Socket emit error:', socketError);
+        }
+      }
+    }
+    console.log(`Per-league AI predictions updated for ${scheduledMatches.length} matches.`);
+  }
+
+  /**
+   * Core logic to generate a prediction for any match.
+   * Useful for both scheduled matches and backtesting historical data.
+   */
+  async generatePrediction(match: any) {
+    try {
       const homeStats = await getTeamMovingAverage(match.homeTeam.id);
       const awayStats = await getTeamMovingAverage(match.awayTeam.id);
 
@@ -196,22 +218,15 @@ export class PredictionEngine {
       if (blendedProbs.over25 > 0.6) analysis += "Grande probabilidade de um jogo aberto (+2.5). ";
       if (blendedProbs.bttsYes > 0.6) analysis += "Ambas as equipes devem marcar. ";
 
-      match.prediction = {
+      return {
         outcome: outcome,
         probabilities: blendedProbs,
         analysis: analysis,
         exactScores: poissonResult.exactScores
       };
-
-      await match.save();
-
-      try {
-        const io = getIO();
-        io.emit('matchUpdated', match);
-      } catch (socketError) {
-        console.error('[PredictionEngine] Socket emit error:', socketError);
-      }
+    } catch (error) {
+      console.error('[PredictionEngine] Error generating prediction:', error);
+      return null;
     }
-    console.log(`Per-league AI predictions updated for ${scheduledMatches.length} matches.`);
   }
 }
