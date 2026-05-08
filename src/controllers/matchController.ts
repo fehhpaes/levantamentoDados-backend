@@ -80,8 +80,12 @@ export const getTodayMatches = async (req: Request, res: Response) => {
 
     const now = new Date();
     
-    const startTime = new Date(now.setHours(0, 0, 0, 0));
-    const endTime = new Date(now.setHours(23, 59, 59, 999));
+    // Use a slightly wider range (30 hours) to account for timezones
+    const startTime = new Date(now);
+    startTime.setHours(startTime.getHours() - 15, 0, 0, 0);
+    
+    const endTime = new Date(now);
+    endTime.setHours(endTime.getHours() + 15, 59, 59, 999);
 
     if (date_type === 'yesterday') {
       startTime.setDate(startTime.getDate() - 1);
@@ -99,7 +103,13 @@ export const getTodayMatches = async (req: Request, res: Response) => {
       query['league.id'] = Number(league_id);
     }
 
+    console.log(`[Matches] Fetching for ${date_type || 'today'}. Range: ${startTime.toISOString()} to ${endTime.toISOString()}`);
     const matches = await Match.find(query).sort({ date: 1 });
+    console.log(`[Matches] Found ${matches.length} matches.`);
+    
+    if (matches.length > 0) {
+      console.log(`[Matches] Sample match: ${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name} at ${matches[0].date.toISOString()}`);
+    }
 
     await setCache(cacheKey, JSON.stringify(matches), 300); // 5 min cache
     res.json(matches);

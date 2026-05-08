@@ -15,6 +15,11 @@ router.get('/sync-status', getSyncStatus);
 router.get('/db-test', testDatabaseWrite); 
 router.get('/clear', clearDatabase); 
 router.get('/ping', (req, res) => { res.json({ status: 'online', time: new Date() }); });
+router.get('/debug/clear-cache', async (req, res) => {
+  const { clearAllCache } = await import('../services/redis.js');
+  await clearAllCache();
+  res.json({ success: true, message: 'All cache cleared for debugging' });
+});
 router.get('/:fixture_id', getMatchById);
 
 export default router;
