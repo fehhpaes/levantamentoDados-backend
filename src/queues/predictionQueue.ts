@@ -3,7 +3,7 @@ import { redisUrl } from '../services/redis.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 import { OddsApiService } from '../services/oddsApi.js';
 import { clearAllCache } from '../services/redis.js';
-import { updateSyncStatus } from '../controllers/matchController.js';
+import { updateSyncStatus } from '../services/syncState.js';
 
 const predictionEngine = new PredictionEngine();
 const oddsApiService = new OddsApiService();

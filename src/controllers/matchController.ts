@@ -6,21 +6,9 @@ import { ApiFootballService } from '../services/apiFootball.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 import { getCache, setCache } from '../services/redis.js';
 import { syncQueue } from '../queues/syncQueue.js';
+import { syncState, updateSyncStatus } from '../services/syncState.js';
 
 import { TeamTest } from '../models/TeamTest.js';
-
-// Global state to track sync progress (in-memory)
-export const syncState = {
-  isSyncing: false,
-  progress: 0,
-  currentTask: '',
-  lastSync: null as Date | null,
-  leaguesProcessed: [] as string[]
-};
-
-export const updateSyncStatus = (data: Partial<typeof syncState>) => {
-  Object.assign(syncState, data);
-};
 
 export const testDatabaseWrite = async (req: Request, res: Response) => {
   try {

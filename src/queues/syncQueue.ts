@@ -5,7 +5,7 @@ import { SportmonksService } from '../services/sportmonks.js';
 import { Match } from '../models/Match.js';
 import { predictionQueue } from './predictionQueue.js';
 import { resolveBetsForMatch } from '../services/betService.js';
-import { updateSyncStatus } from '../controllers/matchController.js';
+import { updateSyncStatus } from '../services/syncState.js';
 
 const footballDataService = new FootballDataService();
 const sportmonksService = new SportmonksService();

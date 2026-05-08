@@ -37,15 +37,22 @@ initSocket(httpServer);
 httpServer.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   
-  // 1. Start Keep-Alive (Independent of DB/Redis)
-  startKeepAlive();
-  
-  // 2. Initialize services in background
-  connectDB();
-  connectRedis().then(() => {
-    // 3. Start Update Worker ONLY if Redis is connected (required for BullMQ)
-    startUpdateWorker();
-  }).catch(err => {
-    console.error('Failed to connect to Redis, update worker not started:', err.message);
-  });
+  // Initialize services in background to avoid blocking the port binding
+  const init = async () => {
+    try {
+      // 1. Start Keep-Alive
+      startKeepAlive();
+      
+      // 2. Connect to Database
+      await connectDB();
+      
+      // 3. Connect to Redis and start workers
+      await connectRedis();
+      startUpdateWorker();
+    } catch (err: any) {
+      console.error('Service initialization error:', err.message);
+    }
+  };
+
+  init();
 });
