@@ -114,7 +114,13 @@ export class PredictionEngine {
    * Predicts outcomes for scheduled matches.
    */
   async predictScheduledMatches() {
-    const scheduledMatches = await Match.find({ status: 'SCHEDULED' });
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const scheduledMatches = await Match.find({ 
+      status: 'SCHEDULED',
+      date: { $gte: now, $lte: nextWeek }
+    });
 
     for (const match of scheduledMatches) {
       const homeStats = await getTeamMovingAverage(match.homeTeam.id);

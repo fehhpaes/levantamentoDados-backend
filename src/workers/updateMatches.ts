@@ -81,6 +81,15 @@ export const startUpdateWorker = () => {
   startupSync();
 
   /**
+   * Periodic Update: Sync today's matches every hour
+   * This ensures live status and scores are updated.
+   */
+  cron.schedule('0 * * * *', async () => {
+    console.log('[Scheduler] Running hourly sync for today\'s matches...');
+    await syncQueue.add('hourly-sync-today', { type: 'sync-today' });
+  });
+
+  /**
    * Self-Healing Job: Check for stuck matches from yesterday
    * Runs every hour to ensure data integrity
    */

@@ -5,6 +5,7 @@ import { SportmonksService } from '../services/sportmonks.js';
 import { Match } from '../models/Match.js';
 import { predictionQueue } from './predictionQueue.js';
 import { resolveBetsForMatch } from '../services/betService.js';
+import { updateSyncStatus } from '../controllers/matchController.js';
 
 const footballDataService = new FootballDataService();
 const sportmonksService = new SportmonksService();
@@ -24,6 +25,12 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
   const { type, competitionCode, date } = job.data;
   console.log(`[SyncWorker] Processing job ${job.id} of type ${type}...`);
 
+  updateSyncStatus({ 
+    isSyncing: true, 
+    progress: 10, 
+    currentTask: `Sincronizando ${competitionCode || 'Jogos de Hoje'}...` 
+  });
+
   try {
     if (type === 'sync-competition') {
       await footballDataService.syncCompetitionMatches(competitionCode, date, date);
@@ -36,14 +43,19 @@ export const syncWorker = new Worker('sync-matches', async (job: Job) => {
       }
     }
 
+    updateSyncStatus({ progress: 40, currentTask: 'Sincronizando estatísticas...' });
+
     // After syncing matches, sync stats for finished ones
     await syncStatsForFinishedMatches();
+
+    updateSyncStatus({ progress: 70, currentTask: 'Gerando previsões IA...' });
 
     // Trigger Prediction Job
     await predictionQueue.add('run-predictions', { source: type });
     
     console.log(`[SyncWorker] Job ${job.id} completed successfully.`);
   } catch (error) {
+    updateSyncStatus({ isSyncing: false, currentTask: 'Erro na sincronização' });
     console.error(`[SyncWorker] Job ${job.id} failed:`, error);
     throw error;
   }

@@ -116,4 +116,10 @@ const MatchSchema: Schema = new Schema({
   }
 });
 
+// Indexes for performance
+MatchSchema.index({ date: 1 });
+MatchSchema.index({ status: 1 });
+MatchSchema.index({ 'league.id': 1 });
+MatchSchema.index({ 'prediction.probabilities': 1 });
+
 export const Match = mongoose.model<IMatch>('Match', MatchSchema);

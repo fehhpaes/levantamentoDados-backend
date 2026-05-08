@@ -10,12 +10,16 @@ import { syncQueue } from '../queues/syncQueue.js';
 import { TeamTest } from '../models/TeamTest.js';
 
 // Global state to track sync progress (in-memory)
-const syncState = {
+export const syncState = {
   isSyncing: false,
   progress: 0,
   currentTask: '',
   lastSync: null as Date | null,
   leaguesProcessed: [] as string[]
+};
+
+export const updateSyncStatus = (data: Partial<typeof syncState>) => {
+  Object.assign(syncState, data);
 };
 
 export const testDatabaseWrite = async (req: Request, res: Response) => {
@@ -117,10 +121,11 @@ export const getTopPredictions = async (req: Request, res: Response) => {
 
     const now = new Date();
     const startTime = new Date(now.setHours(0, 0, 0, 0));
+    const endTime = new Date(now.setHours(23, 59, 59, 999));
     
     const matches = await Match.find({
       status: 'SCHEDULED',
-      date: { $gte: startTime },
+      date: { $gte: startTime, $lt: endTime },
       'prediction.probabilities': { $exists: true }
     });
 
@@ -141,10 +146,11 @@ export const getBetsReport = async (req: Request, res: Response) => {
   try {
     const now = new Date();
     const startTime = new Date(now.setHours(0, 0, 0, 0));
+    const endTime = new Date(now.setHours(23, 59, 59, 999));
     
     const matches = await Match.find({
       status: 'SCHEDULED',
-      date: { $gte: startTime },
+      date: { $gte: startTime, $lt: endTime },
       'prediction.probabilities': { $exists: true }
     });
 
