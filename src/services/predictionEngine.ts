@@ -74,6 +74,20 @@ export class PredictionEngine {
       const homeStats = await getTeamMovingAverage(match.homeTeam.id);
       const awayStats = await getTeamMovingAverage(match.awayTeam.id);
 
+      // Fallback for teams with no stats yet
+      if (homeStats.avgGoalsScored === 0 && awayStats.avgGoalsScored === 0) {
+        return {
+          outcome: 1, // Draw
+          probabilities: {
+            homeWin: 0.33, draw: 0.34, awayWin: 0.33,
+            over25: 0.5, under25: 0.5, bttsYes: 0.5, bttsNo: 0.5,
+            doubleChance1X: 0.67, doubleChance12: 0.66, doubleChanceX2: 0.67
+          },
+          analysis: "Dados estatísticos insuficientes para este confronto.",
+          exactScores: [{ score: "1-1", probability: 0.15 }]
+        };
+      }
+
       const features = [
         match.stats?.home_possession || homeStats.avgPossession,
         match.stats?.away_possession || awayStats.avgPossession,
@@ -147,6 +161,20 @@ export class PredictionEngine {
     try {
       const homeStats = await getTeamMovingAverage(match.homeTeam.id);
       const awayStats = await getTeamMovingAverage(match.awayTeam.id);
+
+      // Fallback for teams with no stats yet
+      if (homeStats.avgGoalsScored === 0 && awayStats.avgGoalsScored === 0) {
+        return {
+          outcome: 1, // Draw
+          probabilities: {
+            homeWin: 0.33, draw: 0.34, awayWin: 0.33,
+            over25: 0.5, under25: 0.5, bttsYes: 0.5, bttsNo: 0.5,
+            doubleChance1X: 0.67, doubleChance12: 0.66, doubleChanceX2: 0.67
+          },
+          analysis: "Dados estatísticos insuficientes para este confronto.",
+          exactScores: [{ score: "1-1", probability: 0.15 }]
+        };
+      }
 
       const predictionInput = [
         homeStats.avgPossession,
