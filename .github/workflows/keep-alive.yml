@@ -1,0 +1,17 @@
+name: Keep Alive Backend
+
+on:
+  schedule:
+    # Roda a cada 15 minutos (o máximo permitido pelo GitHub de forma estável)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Permite rodar manualmente pelo painel do GitHub
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend
+        run: |
+          curl -s https://levantamentodados-backend.onrender.com/api/matches/ping
+          curl -s https://levantamentodados-backend.onrender.com/api/matches/debug/force-sync-past
+          echo "Sinais de vida e auto-correção enviados ao backend!"
