@@ -506,3 +506,15 @@ export const triggerManualSync = async (req: Request, res: Response) => {
     status: 'queued'
   });
 };
+
+export const triggerManualTraining = async (req: Request, res: Response) => {
+  try {
+    await predictionQueue.add('manual-training', { source: 'manual-trigger' });
+    res.json({ 
+      success: true, 
+      message: 'Treinamento da IA iniciado em segundo plano.' 
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

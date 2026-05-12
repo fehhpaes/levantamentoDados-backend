@@ -67,7 +67,14 @@ export class SportmonksService {
       });
 
       if (!foundFixture) {
-        console.log(`[Sportmonks] Match NOT FOUND: ${match.homeTeam.name} vs ${match.awayTeam.name} on ${date}`);
+        // Diagnostic log: show first 3 fixtures to see name formats
+        const sampleFixtures = fixtures.slice(0, 3).map((f: any) => {
+          const h = f.participants.find((p: any) => p.meta.location === 'home')?.name;
+          const a = f.participants.find((p: any) => p.meta.location === 'away')?.name;
+          return `${h} vs ${a}`;
+        }).join(' | ');
+        
+        console.log(`[Sportmonks] Match NOT FOUND: ${match.homeTeam.name} vs ${match.awayTeam.name} on ${date}. API Fixtures: [${sampleFixtures}...]`);
         return;
       }
 
