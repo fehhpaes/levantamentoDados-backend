@@ -199,9 +199,9 @@ export class PredictionEngine {
       // 1. ML Predictions (Random Forest)
       // We need to handle cases where the model might not return all 3 probabilities (0, 1, 2)
       // because it might not have seen all outcomes during training.
-      const rfProbs1X2_raw = models.classifier1X2.predictProbability([predictionInput])[0] as any;
-      const rfProbsOU_raw = models.classifierOverUnder.predictProbability([predictionInput])[0] as any;
-      const rfProbsBTTS_raw = models.classifierBTTS.predictProbability([predictionInput])[0] as any;
+      const rfProbs1X2_raw = models.classifier1X2.predictProbability([predictionInput], 3)[0] as any;
+      const rfProbsOU_raw = models.classifierOverUnder.predictProbability([predictionInput], 2)[0] as any;
+      const rfProbsBTTS_raw = models.classifierBTTS.predictProbability([predictionInput], 2)[0] as any;
 
       // Helper to safely get probability for a specific label
       // Random Forest model in ml-random-forest stores unique labels seen in training.
