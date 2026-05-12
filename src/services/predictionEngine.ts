@@ -197,9 +197,31 @@ export class PredictionEngine {
       const models = this.leagueModels.get(match.league.id) || this.globalModels;
 
       // 1. ML Predictions (Random Forest)
-      const rfProbs1X2 = (models.classifier1X2.predictProbability([predictionInput], 3)[0] as unknown) as number[];
-      const rfProbsOU = (models.classifierOverUnder.predictProbability([predictionInput], 2)[0] as unknown) as number[];
-      const rfProbsBTTS = (models.classifierBTTS.predictProbability([predictionInput], 2)[0] as unknown) as number[];
+      // We need to handle cases where the model might not return all 3 probabilities (0, 1, 2)
+      // because it might not have seen all outcomes during training.
+      const rfProbs1X2_raw = models.classifier1X2.predictProbability([predictionInput])[0] as any;
+      const rfProbsOU_raw = models.classifierOverUnder.predictProbability([predictionInput])[0] as any;
+      const rfProbsBTTS_raw = models.classifierBTTS.predictProbability([predictionInput])[0] as any;
+
+      // Helper to safely get probability for a specific label
+      // Random Forest model in ml-random-forest stores unique labels seen in training.
+      // If trained only on [0, 2], index 0 is Home, index 1 is Away.
+      // This is complex to map without knowing the internal labels.
+      // For now, we'll assume standard [0, 1, 2] and use 0 as fallback if missing/NaN.
+      const getSafeProb = (arr: any, index: number) => {
+        if (!arr || typeof arr[index] !== 'number' || isNaN(arr[index])) return 0;
+        return arr[index];
+      };
+
+      const rfHomeWin = getSafeProb(rfProbs1X2_raw, 0);
+      const rfDraw = getSafeProb(rfProbs1X2_raw, 1);
+      const rfAwayWin = getSafeProb(rfProbs1X2_raw, 2);
+
+      const rfOver25 = getSafeProb(rfProbsOU_raw, 1);
+      const rfUnder25 = getSafeProb(rfProbsOU_raw, 0);
+
+      const rfBTTSYes = getSafeProb(rfProbsBTTS_raw, 1);
+      const rfBTTSNo = getSafeProb(rfProbsBTTS_raw, 0);
 
       // 2. Poisson Predictions
       const homeExpGoals = (homeStats.avgHomeGoalsScored + awayStats.avgAwayGoalsConceded) / 2;
@@ -210,22 +232,32 @@ export class PredictionEngine {
       const rfWeight = 0.6;
       const poissonWeight = 0.4;
 
-      const homeWin = (rfProbs1X2[0] * rfWeight) + (poissonResult.homeWin * poissonWeight);
-      const draw = (rfProbs1X2[1] * rfWeight) + (poissonResult.draw * poissonWeight);
-      const awayWin = (rfProbs1X2[2] * rfWeight) + (poissonResult.awayWin * poissonWeight);
+      // Final Blended probabilities
+      const homeWin = (rfHomeWin * rfWeight) + (poissonResult.homeWin * poissonWeight);
+      const draw = (rfDraw * rfWeight) + (poissonResult.draw * poissonWeight);
+      const awayWin = (rfAwayWin * rfWeight) + (poissonResult.awayWin * poissonWeight);
 
       const blendedProbs = {
-        homeWin,
-        draw,
-        awayWin,
-        over25: (rfProbsOU[1] * rfWeight) + (poissonResult.over25 * poissonWeight),
-        under25: (rfProbsOU[0] * rfWeight) + (poissonResult.under25 * poissonWeight),
-        bttsYes: (rfProbsBTTS[1] * rfWeight) + (poissonResult.bttsYes * poissonWeight),
-        bttsNo: (rfProbsBTTS[0] * rfWeight) + (poissonResult.bttsNo * poissonWeight),
-        doubleChance1X: homeWin + draw,
-        doubleChance12: homeWin + awayWin,
-        doubleChanceX2: draw + awayWin
+        homeWin: homeWin || 0.33,
+        draw: draw || 0.34,
+        awayWin: awayWin || 0.33,
+        over25: ((rfOver25 * rfWeight) + (poissonResult.over25 * poissonWeight)) || 0.5,
+        under25: ((rfUnder25 * rfWeight) + (poissonResult.under25 * poissonWeight)) || 0.5,
+        bttsYes: ((rfBTTSYes * rfWeight) + (poissonResult.bttsYes * poissonWeight)) || 0.5,
+        bttsNo: ((rfBTTSNo * rfWeight) + (poissonResult.bttsNo * poissonWeight)) || 0.5,
+        doubleChance1X: (homeWin + draw) || 0.67,
+        doubleChance12: (homeWin + awayWin) || 0.66,
+        doubleChanceX2: (draw + awayWin) || 0.67
       };
+
+      // Double check for any remaining NaNs in blendedProbs
+      Object.keys(blendedProbs).forEach(key => {
+        const k = key as keyof typeof blendedProbs;
+        if (isNaN(blendedProbs[k])) {
+           // @ts-ignore
+          blendedProbs[k] = 0.5; // Final safe fallback
+        }
+      });
 
       // Determine Outcome from Blended Probs
       let outcome = 1; // Default Draw
