@@ -21,6 +21,11 @@ export class OddsApiService {
    * Syncs odds for all supported competitions.
    */
   async syncAllOdds() {
+    if (!API_KEY || API_KEY === '123' || API_KEY.length < 10) {
+      // Quietly skip if no valid key is present
+      return;
+    }
+
     console.log('[Odds-API] Starting global odds sync...');
     for (const [compCode, sportKey] of Object.entries(SPORT_MAPPING)) {
       try {
@@ -81,7 +86,7 @@ export class OddsApiService {
     if (!match) return;
 
     // Get average odds from all bookmakers provided
-    const h2hOdds = this.calculateAverageOdds(event.bookmakers);
+    const h2hOdds = this.calculateAverageOdds(event.bookmakers, event);
     if (!h2hOdds) return;
 
     if (!match.prediction) {
@@ -100,7 +105,7 @@ export class OddsApiService {
     console.log(`[Odds-API] Odds updated for ${match.homeTeam.name} vs ${match.awayTeam.name}`);
   }
 
-  private calculateAverageOdds(bookmakers: any[]) {
+  private calculateAverageOdds(bookmakers: any[], event: any) {
     if (!bookmakers || bookmakers.length === 0) return null;
 
     let homeSum = 0, drawSum = 0, awaySum = 0;
@@ -109,10 +114,9 @@ export class OddsApiService {
     bookmakers.forEach(bm => {
       const market = bm.markets.find((m: any) => m.key === 'h2h');
       if (market) {
-        const h = market.outcomes.find((o: any) => o.name === bm.home_team || o.name === bm.away_team ? false : false); // Placeholder logic
         // The Odds API format: outcomes is an array of {name, price}
-        const homePrice = market.outcomes.find((o: any) => o.name === bm.home_team)?.price;
-        const awayPrice = market.outcomes.find((o: any) => o.name === bm.away_team)?.price;
+        const homePrice = market.outcomes.find((o: any) => o.name === event.home_team)?.price;
+        const awayPrice = market.outcomes.find((o: any) => o.name === event.away_team)?.price;
         const drawPrice = market.outcomes.find((o: any) => o.name === 'Draw')?.price;
 
         if (homePrice && awayPrice && drawPrice) {
@@ -158,6 +162,13 @@ export class OddsApiService {
         isFound: true,
         target: bestValue.target,
         expectedValue: Number((bestValue.ev * 100).toFixed(1))
+      };
+    } else {
+      match.prediction.valueBet = { isFound: false, target: '', expectedValue: 0 };
+    }
+  }
+}
+stValue.ev * 100).toFixed(1))
       };
     } else {
       match.prediction.valueBet = { isFound: false, target: '', expectedValue: 0 };
