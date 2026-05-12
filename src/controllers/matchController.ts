@@ -6,6 +6,7 @@ import { ApiFootballService } from '../services/apiFootball.js';
 import { PredictionEngine } from '../services/predictionEngine.js';
 import { getCache, setCache } from '../services/redis.js';
 import { syncQueue } from '../queues/syncQueue.js';
+import { predictionQueue } from '../queues/predictionQueue.js';
 import { syncState, updateSyncStatus } from '../services/syncState.js';
 
 import { TeamTest } from '../models/TeamTest.js';

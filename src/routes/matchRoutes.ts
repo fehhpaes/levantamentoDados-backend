@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Match } from '../models/Match.js';
-import { getTodayMatches, getMatchById, getMatchHistory, getTeamStats, triggerManualSync, getLeagues, getSyncStatus, testDatabaseWrite, clearDatabase, getTopPredictions, getBacktestStats, getBetsReport } from '../controllers/matchController.js';
+import { getTodayMatches, getMatchById, getMatchHistory, getTeamStats, triggerManualSync, triggerManualTraining, getLeagues, getSyncStatus, testDatabaseWrite, clearDatabase, getTopPredictions, getBacktestStats, getBetsReport } from '../controllers/matchController.js';
 
 const router = Router();
 
@@ -8,19 +8,10 @@ router.get('/today', getTodayMatches);
 router.get('/top', getTopPredictions);
 router.get('/report', getBetsReport);
 router.get('/backtest', getBacktestStats);
-router.get('/leagues', getLeagues);
-router.get('/history', getMatchHistory);
-router.get('/team/:team_id', getTeamStats);
 router.get('/sync', triggerManualSync); 
+router.get('/train', triggerManualTraining); 
 router.get('/sync-status', getSyncStatus); 
-router.get('/db-test', testDatabaseWrite); 
-router.get('/clear', clearDatabase); 
-router.get('/ping', (req, res) => { 
-  res.json({ 
-    status: 'online', 
-    time: new Date() 
-  }); 
-});
+router.get('/leagues', getLeagues);
 router.get('/debug/clear-cache', async (req, res) => {
   const { clearAllCache } = await import('../services/redis.js');
   await clearAllCache();
