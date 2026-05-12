@@ -168,10 +168,3 @@ export class OddsApiService {
     }
   }
 }
-stValue.ev * 100).toFixed(1))
-      };
-    } else {
-      match.prediction.valueBet = { isFound: false, target: '', expectedValue: 0 };
-    }
-  }
-}
