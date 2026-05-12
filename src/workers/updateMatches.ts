@@ -72,10 +72,10 @@ export const startUpdateWorker = () => {
         type: 'sync-competition',
         competitionCode: comp.code,
         date: today
-      }, { delay: 1000 });
+      });
     }
     
-    await syncQueue.add('startup-sync-general', { type: 'sync-today' }, { delay: 5000 });
+    await syncQueue.add('startup-sync-general', { type: 'sync-today' });
   };
 
   startupSync();
