@@ -1,63 +1,48 @@
-import { createClient } from 'redis';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-
-const client = createClient({
-  url: redisUrl,
-  socket: {
-    connectTimeout: 20000,
-    reconnectStrategy: (retries) => Math.min(retries * 100, 3000)
-  }
-});
-
-client.on('error', (err) => console.error('[Redis] Client Error:', err));
+// Simple in-memory cache to replace Redis
+const memoryCache = new Map<string, { value: string, expires: number }>();
 
 export const connectRedis = async () => {
-  try {
-    await client.connect();
-    console.log('[Redis] Connected successfully');
-  } catch (error) {
-    console.error('[Redis] Connection failed:', error);
-  }
+  console.log('[Cache] Using In-Memory Cache (Redis disabled)');
+  return Promise.resolve();
 };
 
 export const getCache = async (key: string): Promise<string | null> => {
-  try {
-    return await client.get(key);
-  } catch (error) {
-    console.error(`[Redis] Get error for key ${key}:`, error);
+  const item = memoryCache.get(key);
+  if (!item) return null;
+
+  if (Date.now() > item.expires) {
+    memoryCache.delete(key);
     return null;
   }
+  return item.value;
 };
 
 export const setCache = async (key: string, value: string, ttlSeconds: number = 3600): Promise<void> => {
-  try {
-    await client.set(key, value, {
-      EX: ttlSeconds
-    });
-  } catch (error) {
-    console.error(`[Redis] Set error for key ${key}:`, error);
-  }
+  memoryCache.set(key, {
+    value,
+    expires: Date.now() + (ttlSeconds * 1000)
+  });
 };
 
 export const deleteCache = async (key: string): Promise<void> => {
-  try {
-    await client.del(key);
-  } catch (error) {
-    console.error(`[Redis] Delete error for key ${key}:`, error);
-  }
+  memoryCache.delete(key);
 };
 
 export const clearAllCache = async (): Promise<void> => {
-  try {
-    await client.flushAll();
-    console.log('[Redis] All cache cleared');
-  } catch (error) {
-    console.error('[Redis] Flush error:', error);
-  }
+  memoryCache.clear();
+  console.log('[Cache] In-Memory Cache cleared');
 };
 
-export default client;
+// Mock client to avoid breaking imports that expect the redis client object
+export default {
+  connect: () => Promise.resolve(),
+  get: getCache,
+  set: setCache,
+  del: deleteCache,
+  flushAll: clearAllCache,
+  on: () => {}
+};

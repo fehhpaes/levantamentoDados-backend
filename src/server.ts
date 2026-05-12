@@ -36,7 +36,7 @@ httpServer.listen(Number(PORT), '0.0.0.0', () => {
   const initializeWorker = async () => {
     try {
       await connectDB();
-      await connectRedis();
+      // await connectRedis(); // Disabled for In-Memory Mode
       
       const { startUpdateWorker, startKeepAlive } = await import('./workers/updateMatches.js');
       await import('./queues/syncQueue.js');
