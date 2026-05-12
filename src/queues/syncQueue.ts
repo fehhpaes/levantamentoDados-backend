@@ -47,7 +47,16 @@ class MemorySyncQueue extends EventEmitter {
 
     try {
       if (type === 'sync-competition') {
-        await footballDataService.syncCompetitionMatches(competitionCode, date, date);
+        const startDate = new Date(date);
+        startDate.setDate(startDate.getDate() - 3);
+        const endDate = new Date(date);
+        endDate.setDate(endDate.getDate() + 7);
+
+        const dateFrom = startDate.toISOString().split('T')[0];
+        const dateTo = endDate.toISOString().split('T')[0];
+        
+        console.log(`[SyncWorker] Expanding sync range: ${dateFrom} to ${dateTo}`);
+        await footballDataService.syncCompetitionMatches(competitionCode, dateFrom, dateTo);
       } else if (type === 'sync-today') {
         if (date) {
           await footballDataService.fetchAndSyncMatches(date, date);

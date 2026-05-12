@@ -15,6 +15,16 @@ const api = axios.create({
 });
 
 export class SportmonksService {
+  private normalizeName(name: string): string {
+    if (!name) return '';
+    return name
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Remove accents
+      .replace(/\b(fc|cf|sl|sc|ac|rc|afc|sd|ud|vitoria|club|esporte|clube|de|do|da|o|a|1\.)\b/g, "")
+      .replace(/\s+/g, "") // Remove all spaces for tighter matching
+      .trim();
+  }
+
   /**
    * Fetches statistics for a match by searching for it using team names and date.
    * This solves the ID mismatch between Football-Data.org and Sportmonks.
@@ -22,33 +32,47 @@ export class SportmonksService {
   async syncStatsByMatch(match: any): Promise<void> {
     try {
       const date = new Date(match.date).toISOString().split('T')[0];
-      console.log(`[Sportmonks] Searching stats for ${match.homeTeam.name} vs ${match.awayTeam.name} on ${date}`);
-
+      
       // 1. Fetch all fixtures for that date
       const response = await api.get(`/fixtures/date/${date}`, {
         params: {
-          include: 'participants;statistics'
+          include: 'participants;statistics;scores;state'
         }
       });
 
       const fixtures = response.data.data;
-      if (!fixtures || fixtures.length === 0) return;
+      if (!fixtures || fixtures.length === 0) {
+        console.log(`[Sportmonks] No fixtures found on API for ${date}`);
+        return;
+      }
 
       // 2. Find the match that matches our team names (fuzzy match)
-      const foundFixture = fixtures.find((f: any) => {
-        const home = f.participants.find((p: any) => p.meta.location === 'home')?.name.toLowerCase();
-        const away = f.participants.find((p: any) => p.meta.location === 'away')?.name.toLowerCase();
-        
-        const targetHome = match.homeTeam.name.toLowerCase();
-        const targetAway = match.awayTeam.name.toLowerCase();
+      const targetHome = this.normalizeName(match.homeTeam.name);
+      const targetAway = this.normalizeName(match.awayTeam.name);
 
-        // Simple fuzzy match: check if names are contained in each other
-        return (home.includes(targetHome) || targetHome.includes(home)) &&
-               (away.includes(targetAway) || targetAway.includes(away));
+      const foundFixture = fixtures.find((f: any) => {
+        const homePart = f.participants.find((p: any) => p.meta.location === 'home');
+        const awayPart = f.participants.find((p: any) => p.meta.location === 'away');
+        
+        if (!homePart || !awayPart) return false;
+
+        const home = this.normalizeName(homePart.name);
+        const away = this.normalizeName(awayPart.name);
+
+        // Match if names are similar enough
+        const homeMatch = home.includes(targetHome) || targetHome.includes(home);
+        const awayMatch = away.includes(targetAway) || targetAway.includes(away);
+
+        return homeMatch && awayMatch;
       });
 
-      if (!foundFixture || !foundFixture.statistics || foundFixture.statistics.length < 2) {
-        console.log(`[Sportmonks] Match not found or no stats for ${match.homeTeam.name} on ${date}`);
+      if (!foundFixture) {
+        console.log(`[Sportmonks] Match NOT FOUND: ${match.homeTeam.name} vs ${match.awayTeam.name} on ${date}`);
+        return;
+      }
+
+      if (!foundFixture.statistics || foundFixture.statistics.length < 2) {
+        console.log(`[Sportmonks] NO STATS for found match: ${match.homeTeam.name} on ${date}`);
         return;
       }
 
