@@ -50,3 +50,22 @@ jobs:
           MONGODB_URL: mongodb://localhost:27017/test
           MONGODB_DATABASE: test
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY || 'mock_key_for_ci' }}
+
+  deploy-huggingface:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "bot@github.com"
+          git config --global user.name "GitHub Action"
+          git push --force https://fehhpaes:$HF_TOKEN@huggingface.co/spaces/fehhpaes/previsao-fc-worker main
