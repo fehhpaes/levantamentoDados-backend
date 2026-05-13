@@ -310,33 +310,50 @@ export class PredictionEngine {
       if (isLeagueModel) confidenceBoost += 0.1;
       if (maxProb > 0.65) confidenceBoost += 0.1;
 
-      // Determine Analysis and add "Confidence" tag
-      let analysis: string = "";
+      // Determine Analysis and add structured insights (Phase 4)
       const confidenceLevel = Math.min(95, Math.round((maxProb + confidenceBoost) * 100));
-      
-      analysis += `[Confiança: ${confidenceLevel}%] `;
+      let insights: string[] = [];
 
+      insights.push(`[Confiança: ${confidenceLevel}%]`);
+
+      // 1. Momentum Insight
+      const formDiff = homeStats.formPoints - awayStats.formPoints;
+      if (Math.abs(formDiff) >= 3) {
+        insights.push(`Momentum: ${formDiff > 0 ? match.homeTeam.name : match.awayTeam.name} superior.`);
+      }
+
+      // 2. xG Insight
+      if (homeStats.avgXG > 1.7 && awayStats.avgXG < 1.2) {
+        insights.push(`xG: ${match.homeTeam.name} em ascensão ofensiva.`);
+      } else if (awayStats.avgXG > 1.7 && homeStats.avgXG < 1.2) {
+        insights.push(`xG: ${match.awayTeam.name} em ascensão ofensiva.`);
+      }
+
+      // 3. H2H Insight
       if (h2h.totalMatches >= 3) {
-        const dominance = h2h.homeWins > h2h.awayWins ? match.homeTeam.name : match.awayTeam.name;
-        if (h2h.homeWins !== h2h.awayWins) {
-          analysis += `Histórico H2H favorável ao ${dominance}. `;
+        if (h2h.homeWins > h2h.awayWins + 1) {
+          insights.push(`H2H: Favorável ao ${match.homeTeam.name}.`);
+        } else if (h2h.awayWins > h2h.homeWins + 1) {
+          insights.push(`H2H: Favorável ao ${match.awayTeam.name}.`);
         }
       }
 
-      if (homeStats.avgXG > 1.8) analysis += `${match.homeTeam.name} tem alta criação de jogadas (xG ${homeStats.avgXG.toFixed(1)}). `;
-      
-      if (outcome === 0) {
-        analysis += `${match.homeTeam.name} é favorito com forte momentum em casa. `;
-      } else if (outcome === 2) {
-        analysis += `${match.awayTeam.name} apresenta melhor desempenho recente como visitante. `;
-      } else {
-        analysis += "Confronto de alto equilíbrio tático. ";
+      // 4. Tactical Equilibrium
+      if (maxProb < 0.45) {
+        insights.push("Equilíbrio tático elevado.");
       }
+
+      // 5. Poisson vs ML agreement
+      if (modelsAgree && maxProb > 0.55) {
+        insights.push("IA: Forte convergência estatística.");
+      }
+
+      const finalAnalysis = insights.join(' • ');
 
       return {
         outcome: outcome,
         probabilities: blendedProbs,
-        analysis: analysis.trim(),
+        analysis: finalAnalysis,
         exactScores: poissonResult.exactScores
       };
     } catch (error) {

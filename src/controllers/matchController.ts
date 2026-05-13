@@ -380,11 +380,13 @@ export const getMatchHistory = async (req: Request, res: Response) => {
 export const getBacktestStats = async (req: Request, res: Response) => {
   try {
     const cacheKey = 'stats:backtest';
+    // We can still use cache but maybe shorter duration during refinement
     const cachedData = await getCache(cacheKey);
     if (cachedData) {
       return res.json(JSON.parse(cachedData));
     }
 
+    // Phase 4: More comprehensive analysis of historical accuracy
     const finishedMatches = await Match.find({
       status: 'FINISHED',
       prediction: { $exists: true },
@@ -407,7 +409,7 @@ export const getBacktestStats = async (req: Request, res: Response) => {
     let ouTotal = 0;
     let bttsTotal = 0;
 
-    const leagueMap: Record<number, { name: string; total: number; hits: number }> = {};
+    const leagueMap: Record<number, { name: string; total: number; hits: number; ouHits: number; ouTotal: number }> = {};
 
     const processedMatches = finishedMatches.map(match => {
       const homeScore = match.score.home;
@@ -425,30 +427,28 @@ export const getBacktestStats = async (req: Request, res: Response) => {
 
       // Over/Under 2.5
       let isOUHit = false;
-      if (match.prediction!.probabilities.over25 !== undefined) {
-        ouTotal++;
-        const predictedOver = match.prediction!.probabilities.over25 > 0.5;
-        const actualOver = totalGoals > 2.5;
-        isOUHit = predictedOver === actualOver;
-        if (isOUHit) ouHits++;
-      }
+      const predictedOver = (match.prediction!.probabilities.over25 ?? 0) > 0.5;
+      const actualOver = totalGoals > 2.5;
+      isOUHit = predictedOver === actualOver;
+      ouTotal++;
+      if (isOUHit) ouHits++;
 
       // BTTS
       let isBTTSHit = false;
-      if (match.prediction!.probabilities.bttsYes !== undefined) {
-        bttsTotal++;
-        const predictedBTTS = match.prediction!.probabilities.bttsYes > 0.5;
-        const actualBTTS = homeScore > 0 && awayScore > 0;
-        isBTTSHit = predictedBTTS === actualBTTS;
-        if (isBTTSHit) bttsHits++;
-      }
+      const predictedBTTS = (match.prediction!.probabilities.bttsYes ?? 0) > 0.5;
+      const actualBTTS = homeScore > 0 && awayScore > 0;
+      isBTTSHit = predictedBTTS === actualBTTS;
+      bttsTotal++;
+      if (isBTTSHit) bttsHits++;
 
-      // Update league stats (using Winner as baseline)
+      // Update league stats
       if (!leagueMap[match.league.id]) {
-        leagueMap[match.league.id] = { name: match.league.name, total: 0, hits: 0 };
+        leagueMap[match.league.id] = { name: match.league.name, total: 0, hits: 0, ouHits: 0, ouTotal: 0 };
       }
       leagueMap[match.league.id].total++;
       if (isWinnerHit) leagueMap[match.league.id].hits++;
+      leagueMap[match.league.id].ouTotal++;
+      if (isOUHit) leagueMap[match.league.id].ouHits++;
 
       return {
         fixture_id: match.fixture_id,
@@ -459,9 +459,9 @@ export const getBacktestStats = async (req: Request, res: Response) => {
         isWinnerHit,
         isOUHit,
         isBTTSHit,
-        isHit: isWinnerHit, // Frontend expects isHit
-        predictedOutcome: match.prediction!.outcome, // Frontend expects predictedOutcome
-        actualOutcome: actualOutcome, // Frontend expects actualOutcome
+        isHit: isWinnerHit, 
+        predictedOutcome: match.prediction!.outcome, 
+        actualOutcome: actualOutcome, 
         date: match.date,
         league: match.league.name
       };
@@ -469,7 +469,7 @@ export const getBacktestStats = async (req: Request, res: Response) => {
 
     const result = {
       total: finishedMatches.length,
-      hits: winnerHits, // Frontend expects hits
+      hits: winnerHits,
       accuracy: Math.round((winnerHits / finishedMatches.length) * 100),
       markets: {
         winner: Math.round((winnerHits / finishedMatches.length) * 100),
@@ -478,9 +478,10 @@ export const getBacktestStats = async (req: Request, res: Response) => {
       },
       leagueStats: Object.values(leagueMap).map(l => ({
         ...l,
-        accuracy: Math.round((l.hits / l.total) * 100)
+        accuracy: Math.round((l.hits / l.total) * 100),
+        ouAccuracy: l.ouTotal > 0 ? Math.round((l.ouHits / l.ouTotal) * 100) : 0
       })).sort((a, b) => b.total - a.total),
-      recentMatches: processedMatches.slice(0, 10)
+      recentMatches: processedMatches.slice(0, 15) // Slightly more recent matches
     };
 
     await setCache(cacheKey, JSON.stringify(result), 1800);
